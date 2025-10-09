@@ -1,0 +1,6 @@
+[build]
+installCommand = "corepack enable && yarn install --immutable"
+buildCommand   = "yarn build"
+
+[start]
+cmd = "yarn start"
