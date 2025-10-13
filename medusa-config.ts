@@ -16,7 +16,17 @@ module.exports = defineConfig({
       cookieSecret: process.env.COOKIE_SECRET || "supersecret",
     },
   },
-  plugins: ["medusa-plugin-razorpay-v2"],
+  plugins: [
+    "medusa-plugin-razorpay-v2", 
+    {
+    resolve: `medusa-plugin-contentful`,
+    options: {
+      space_id: process.env.CONTENTFUL_SPACE_ID,
+      access_token: process.env.CONTENTFUL_ACCESS_TOKEN,
+      environment: process.env.CONTENTFUL_ENV,
+    },
+  },
+],
   modules: [
     {
       resolve: "@medusajs/medusa/payment",
