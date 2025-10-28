@@ -51,30 +51,20 @@ module.exports = defineConfig({
         ],
       },
     },
-    // {
-    //   resolve: "@medusajs/medusa/fulfillment",
-    //   dependencies: [
-    //     Modules.FULFILLMENT
-    //   ],
-    //   options: {
-    //     providers: [
-    //       {
-    //         resolve: "@medusajs/medusa/fulfillment-manual",
-    //         id: "manual",
-    //       },
-    //       {
-    //         resolve: "./src/modules/delhivery-fulfillment",
-    //         id: "delhivery",
-    //         options: {
-    //           apiToken: '28e27442e6480b1e121f5329cf4e42bcb1c20967',
-    //           isProduction: process.env.NODE_ENV === "production",
-    //           warehouseCode: process.env.DELHIVERY_WAREHOUSE_CODE || "462024",
-    //           clientName: process.env.DELHIVERY_CLIENT_NAME || "Jardin Botanica",
-    //         },
-    //       },
-    //     ],
-    //   },
-    // },
+    {
+      resolve: "@medusajs/medusa/fulfillment",
+      dependencies: [
+        Modules.FULFILLMENT
+      ],
+      options: {
+        providers: [
+          {
+            resolve: "@medusajs/medusa/fulfillment-manual",
+            id: "manual",
+          },
+        ],
+      },
+    },
     // {
     //   resolve: "@medusajs/notification",
     //   options: {
