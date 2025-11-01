@@ -1,5 +1,5 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
-import axios from "axios";
+import { DelhiveryApiClient } from "../../../../../modules/delhivery-fulfillment/api-client";
 
 export async function GET(
   req: MedusaRequest,
@@ -13,27 +13,24 @@ export async function GET(
     });
   }
 
-  try {
-    const baseUrl = process.env.DELHIVERY_BASE_URL || 'https://track.delhivery.com/';
-    const response = await axios.get(
-      `${baseUrl}c/api/kinko/v1/invoice/charges`,
-      {
-        params: {
-          filter_codes: pincode,
-          weight: weight,
-        },
-        headers: {
-          Authorization: `Token ${process.env.DELHIVERY_API_TOKEN}`,
-        },
-      }
-    );
+  if (!process.env.DELHIVERY_API_TOKEN) {
+    return res.status(500).json({
+      error: "Delhivery API token not configured",
+    });
+  }
 
-    return res.json(response.data);
+  try {
+    const client = new DelhiveryApiClient();
+    const data = await client.calculateShipping(
+      pincode as string,
+      Number(weight)
+    );
+    return res.json(data);
   } catch (error: any) {
     console.error("Calculate shipping error:", error);
     return res.status(500).json({
       error: "Failed to calculate shipping",
-      details: error.response?.data || error.message,
+      details: error.message,
     });
   }
 }

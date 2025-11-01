@@ -15,10 +15,14 @@ module.exports = defineConfig({
       jwtSecret: process.env.JWT_SECRET || "supersecret",
       cookieSecret: process.env.COOKIE_SECRET || "supersecret",
     },
-    server: {
-      allowedHosts: ["medusa.khabarloktantra.com","api.jardinbotanica.com"],
-    },
-  } as any,
+  },
+  admin: {
+    vite: () => ({
+      server: {
+        allowedHosts: process.env.ALLOWED_HOSTS?.split(',') || [],
+      },
+    }),
+  },
   plugins: [
     "medusa-plugin-razorpay-v2", 
     {
@@ -27,6 +31,7 @@ module.exports = defineConfig({
       space_id: process.env.CONTENTFUL_SPACE_ID,
       access_token: process.env.CONTENTFUL_ACCESS_TOKEN,
       environment: process.env.CONTENTFUL_ENV,
+      webhook_secret: process.env.CONTENTFUL_WEBHOOK_SECRET,
     },
   },
 ],

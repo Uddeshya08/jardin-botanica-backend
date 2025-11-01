@@ -1,5 +1,5 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
-import axios from "axios";
+import { DelhiveryApiClient } from "../../../../../modules/delhivery-fulfillment/api-client";
 
 export async function GET(
   req: MedusaRequest,
@@ -13,24 +13,21 @@ export async function GET(
     });
   }
 
-  try {
-    const baseUrl = process.env.DELHIVERY_BASE_URL || 'https://track.delhivery.com/';
-    const response = await axios.get(
-      `${baseUrl}c/api/pin-codes/json/`,
-      {
-        params: { filter_codes: pincode },
-        headers: {
-          Authorization: `Token ${process.env.DELHIVERY_API_TOKEN}`,
-        },
-      }
-    );
+  if (!process.env.DELHIVERY_API_TOKEN) {
+    return res.status(500).json({
+      error: "Delhivery API token not configured",
+    });
+  }
 
-    return res.json(response.data);
+  try {
+    const client = new DelhiveryApiClient();
+    const data = await client.checkServiceability(pincode as string);
+    return res.json(data);
   } catch (error: any) {
     console.error("Serviceability check error:", error);
     return res.status(500).json({
       error: "Failed to check delivery serviceability",
-      details: error.response?.data || error.message,
+      details: error.message,
     });
   }
 }

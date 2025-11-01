@@ -39,6 +39,11 @@ export default async (
   const storeModuleService = container.resolve(Modules.STORE)
   const [store] = await storeModuleService.listStores()
 
+  if (!store) {
+    console.warn("No store found. Skipping Contentful migrations.")
+    return
+  }
+
   if (store.metadata?.ran_contentful_migrations) {
     return
   }
@@ -55,6 +60,15 @@ export default async (
   if (!contentfulPlugin) {
     console.log(
       "Didn't find Contentful plugin. Aborting migration..."
+    )
+    return
+  }
+
+  if (!contentfulPlugin.options.space_id || 
+      !contentfulPlugin.options.access_token || 
+      !contentfulPlugin.options.environment) {
+    console.error(
+      "Missing required Contentful credentials (space_id, access_token, or environment). Aborting migration..."
     )
     return
   }
@@ -103,18 +117,22 @@ export default async (
           migrationFunction.name
         } component`)
       } catch (e) {
-        if (
-          typeof e === "object" && "errors" in e &&
+        const isAlreadyExistsError = 
+          typeof e === "object" && 
+          e !== null &&
+          "errors" in e &&
           Array.isArray(e.errors) && 
-          e.errors.length > 0 && 
-          e.errors[0].type === "Invalid Action" && 
-          e.errors[0].message.includes("already exists")
-        ) {
+          e.errors.some((err: any) => 
+            err?.type === "Invalid Action" && 
+            err?.message?.includes("already exists")
+          )
+        
+        if (isAlreadyExistsError) {
           console.info(`${
             migrationFunction.name
           } already exists. Skipping its migration.`)
         } else {
-          throw new Error(e)
+          throw e
         }
       }
     })
