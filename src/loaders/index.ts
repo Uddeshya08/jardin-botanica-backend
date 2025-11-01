@@ -1,8 +1,10 @@
-import { 
-  ConfigModule, 
-  StoreService, 
-  MedusaContainer,
-} from "@medusajs/medusa"
+import type { MedusaContainer } from "@medusajs/framework/types"
+import { Modules } from "@medusajs/framework/utils"
+import { updateStoresWorkflow } from "@medusajs/medusa/core-flows"
+
+type MedusaConfig = {
+  plugins?: Array<string | { resolve: string; options?: Record<string, unknown> }>
+}
 import { runMigration } from "contentful-migration"
 import { 
   productMigration,
@@ -31,13 +33,11 @@ type ContentfulPluginType = {
 
 export default async (
   container: MedusaContainer,
-  config: ConfigModule
+  config: MedusaConfig
 ): Promise<void> => {
   // ensure that migration only runs once
-  const storeService = container.resolve<StoreService>(
-    "storeService"
-  )
-  const store = await storeService.retrieve()
+  const storeModuleService = container.resolve(Modules.STORE)
+  const [store] = await storeModuleService.listStores()
 
   if (store.metadata?.ran_contentful_migrations) {
     return
@@ -47,10 +47,10 @@ export default async (
   
   // load Contentful options
   const contentfulPlugin = config.plugins
-    .find((plugin) => 
+    ?.find((plugin) => 
       typeof plugin === "object" && 
       plugin.resolve === "medusa-plugin-contentful"
-    ) as ContentfulPluginType
+    ) as ContentfulPluginType | undefined
 
   if (!contentfulPlugin) {
     console.log(
@@ -120,9 +120,14 @@ export default async (
     })
   )
 
-  await storeService.update({
-    metadata: {
-      ran_contentful_migrations: true,
+  await updateStoresWorkflow(container).run({
+    input: {
+      selector: { id: store.id },
+      update: {
+        metadata: {
+          ran_contentful_migrations: true,
+        },
+      },
     },
   })
 

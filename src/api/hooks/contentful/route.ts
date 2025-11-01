@@ -3,18 +3,28 @@ import type {
   MedusaResponse,
 } from "@medusajs/framework/http"
 
+type ContentfulWebhookEvent = {
+  sys?: {
+    type?: string
+    id?: string
+    contentType?: {
+      sys?: {
+        id?: string
+      }
+    }
+    environment?: {
+      sys?: {
+        id?: string
+      }
+    }
+  }
+}
+
 export const POST = async (
   req: MedusaRequest,
   res: MedusaResponse
 ) => {
-  const event = req.body
-
-  console.log("Received Contentful webhook:", {
-    topic: event.sys?.type,
-    contentType: event.sys?.contentType?.sys?.id,
-    environment: event.sys?.environment?.sys?.id,
-    entityId: event.sys?.id,
-  })
+  const event = req.body as ContentfulWebhookEvent
 
   try {
     // The medusa-plugin-contentful handles the sync automatically

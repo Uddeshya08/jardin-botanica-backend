@@ -15,7 +15,10 @@ module.exports = defineConfig({
       jwtSecret: process.env.JWT_SECRET || "supersecret",
       cookieSecret: process.env.COOKIE_SECRET || "supersecret",
     },
-  },
+    server: {
+      allowedHosts: ["medusa.khabarloktantra.com","api.jardinbotanica.com"],
+    },
+  } as any,
   plugins: [
     "medusa-plugin-razorpay-v2", 
     {
