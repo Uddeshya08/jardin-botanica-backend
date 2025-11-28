@@ -254,7 +254,7 @@ class DelhiveryFulfillmentProviderService extends AbstractFulfillmentProviderSer
     };
 
     const response = await this.client_.createShipment(shipment, {
-      name: "Jardin Botanica",
+      name: this.options_.pickupLocationName || "Jardin Botanica",
     });
 
     const waybill = response?.packages?.[0]?.waybill || response?.waybill || response?.rmk;
