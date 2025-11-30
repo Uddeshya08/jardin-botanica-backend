@@ -1,5 +1,5 @@
 import { loadEnv, defineConfig } from "@medusajs/framework/utils";
-import { Modules } from "@medusajs/framework/utils"
+import { Modules } from "@medusajs/framework/utils";
 loadEnv(process.env.NODE_ENV || "development", process.cwd());
 
 console.log("id => ", process.env.RAZORPAY_ID);
@@ -19,41 +19,41 @@ module.exports = defineConfig({
   admin: {
     vite: () => ({
       server: {
-        allowedHosts: process.env.ALLOWED_HOSTS?.split(',') || [],
+        allowedHosts: process.env.ALLOWED_HOSTS?.split(",") || [],
       },
     }),
   },
   plugins: [
-    "medusa-plugin-razorpay-v2", 
+    "medusa-plugin-razorpay-v2",
     {
-    resolve: `medusa-plugin-contentful`,
-    options: {
-      space_id: process.env.CONTENTFUL_SPACE_ID,
-      access_token: process.env.CONTENTFUL_ACCESS_TOKEN,
-      environment: process.env.CONTENTFUL_ENV,
-      webhook_secret: process.env.CONTENTFUL_WEBHOOK_SECRET,
+      resolve: `medusa-plugin-contentful`,
+      options: {
+        space_id: process.env.CONTENTFUL_SPACE_ID,
+        access_token: process.env.CONTENTFUL_ACCESS_TOKEN,
+        environment: process.env.CONTENTFUL_ENV,
+        webhook_secret: process.env.CONTENTFUL_WEBHOOK_SECRET,
+      },
     },
-  },
-],
+    // "medusa-payment-manual",
+  ],
   modules: [
     {
       resolve: "@medusajs/medusa/payment",
-      dependencies: [
-        Modules.PAYMENT
-      ],
+      dependencies: [Modules.PAYMENT],
       options: {
         providers: [
           {
             resolve: "medusa-plugin-razorpay-v2/providers/payment-razorpay/src",
             id: "razorpay",
             options: {
-              key_id: 'rzp_test_KZp3v4sgtPHTJI',
-              key_secret: '6iBecocanXPMuol08SHvt0zZ',
-              razorpay_account: 'QmIYdoc2xbazYx',
+              key_id: "rzp_test_KZp3v4sgtPHTJI",
+              key_secret: "6iBecocanXPMuol08SHvt0zZ",
+              razorpay_account: "QmIYdoc2xbazYx",
               automatic_expiry_period: 30 /* any value between 12minuts and 30 days expressed in minutes*/,
               manual_expiry_period: 20,
               refund_speed: "normal",
-              webhook_secret: 'rzp_webhook_7xTgD3k9LqPz!2Vn',
+              auto_capture: true,
+              webhook_secret: "rzp_webhook_7xTgD3k9LqPz!2Vn",
             },
           },
         ],
@@ -61,14 +61,18 @@ module.exports = defineConfig({
     },
     {
       resolve: "@medusajs/medusa/fulfillment",
-      dependencies: [
-        Modules.FULFILLMENT
-      ],
       options: {
         providers: [
           {
             resolve: "@medusajs/medusa/fulfillment-manual",
             id: "manual",
+          },
+          {
+            resolve: "./src/modules/delhivery-fulfillment",
+            id: "delhivery",
+            options: {
+              pickupLocationName: "Jardin Botanica",
+            },
           },
         ],
       },

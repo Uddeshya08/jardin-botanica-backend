@@ -1,10 +1,7 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { DelhiveryApiClient } from "../../../../../modules/delhivery-fulfillment/api-client";
 
-export async function GET(
-  req: MedusaRequest,
-  res: MedusaResponse
-) {
+export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const { pincode } = req.query;
 
   if (!pincode) {
@@ -31,4 +28,3 @@ export async function GET(
     });
   }
 }
-
