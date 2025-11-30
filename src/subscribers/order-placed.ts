@@ -1,5 +1,6 @@
 import type { SubscriberConfig, SubscriberArgs } from "@medusajs/framework";
 import { Modules } from "@medusajs/framework/utils";
+import { sendOrderConfirmationEmail } from "../services/email.service";
 
 export default async function handleOrderPlaced({
   event: { data },
@@ -125,6 +126,14 @@ export default async function handleOrderPlaced({
       "Updated order with fulfillments:",
       JSON.stringify(updatedOrders[0].fulfillments, null, 2),
     );
+
+    // Send order confirmation email after fulfillment is created
+    try {
+      await sendOrderConfirmationEmail(order);
+    } catch (emailError) {
+      // Don't fail the fulfillment if email fails
+      console.error("Error sending order confirmation email:", emailError);
+    }
 
     return fulfillment;
   } catch (error) {
