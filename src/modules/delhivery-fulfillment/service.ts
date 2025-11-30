@@ -138,6 +138,8 @@ class DelhiveryFulfillmentProviderService extends AbstractFulfillmentProviderSer
   ): Promise<CalculatedShippingOptionPrice> {
     const { shipping_address, items, from_location } = context;
 
+    const paymentMethod = data.paymentMethod;
+
     if (!shipping_address?.postal_code) {
       throw new Error("Delivery pincode missing");
     }
@@ -174,7 +176,7 @@ class DelhiveryFulfillmentProviderService extends AbstractFulfillmentProviderSer
       weightInGrams: totalWeightGrams,
       mode: delhiveryMode,
       status: "Delivered",
-      paymentType: "Pre-paid",
+      paymentType: paymentMethod === "PREPAID" ? "Pre-paid" : "COD",
     });
 
     // Extract pricing details from Delhivery response
@@ -210,6 +212,20 @@ class DelhiveryFulfillmentProviderService extends AbstractFulfillmentProviderSer
     console.log("fulfillment", JSON.stringify(fulfillment, null, 2));
     console.log("order", JSON.stringify(order, null, 2));
 
+    const paymentMethod = data.paymentMethod;
+
+    if (paymentMethod !== "COD" && paymentMethod !== "PREPAID") {
+      throw new Error("Payment method is required");
+    }
+
+    if (paymentMethod === "PREPAID" && data.cod_available != true) {
+      throw new Error("COD payment method is not supported");
+    }
+
+    if (paymentMethod === "PREPAID" && data.prepaid_available != true) {
+      throw new Error("COD payment method is not supported");
+    }
+
     const delivery = (fulfillment as any).delivery_address;
 
     if (!delivery) {
@@ -225,6 +241,21 @@ class DelhiveryFulfillmentProviderService extends AbstractFulfillmentProviderSer
       const w = (i as any).variant?.weight || 0;
       return sum + w * (i.quantity || 1);
     }, 0);
+
+    const products_desc = order.items
+      .map((item) => {
+        const title = item.title || "";
+        const subtitle = item.subtitle || "";
+        const qty = item.quantity || 1;
+        return `${title}-${subtitle}-${qty}`;
+      })
+      .join(", ");
+
+    const totalAmount = data.totalAmount;
+
+    if (!totalAmount) {
+      throw new Error("Total amount is required");
+    }
 
     if (totalWeightGrams <= 0) {
       throw new Error(
@@ -246,12 +277,15 @@ class DelhiveryFulfillmentProviderService extends AbstractFulfillmentProviderSer
       state: delivery.province,
       country: delivery.country_code,
       weight: totalWeightGrams,
-      // payment_mode: "captured" === "captured" ? "Prepaid" : "COD",
-      payment_mode: "Prepaid",
+      payment_mode: paymentMethod === "PREPAID" ? "Prepaid" : "COD",
+      cod_amount: paymentMethod === "COD" ? totalAmount : null,
       shipping_mode: validShippingMode,
-      products_desc: items.map((i) => (i as any).title).join(", "),
+      products_desc: products_desc,
+      total_amount: totalAmount,
       quantity: items.reduce((sum, i) => sum + (i.quantity || 1), 0).toString(),
     };
+
+    console.log("shipment", shipment);
 
     const response = await this.client_.createShipment(shipment, {
       name: this.options_.pickupLocationName || "Jardin Botanica",

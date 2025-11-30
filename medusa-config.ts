@@ -34,6 +34,7 @@ module.exports = defineConfig({
         webhook_secret: process.env.CONTENTFUL_WEBHOOK_SECRET,
       },
     },
+    // "medusa-payment-manual",
   ],
   modules: [
     {
