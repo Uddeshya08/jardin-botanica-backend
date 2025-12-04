@@ -140,6 +140,15 @@ class DelhiveryFulfillmentProviderService extends AbstractFulfillmentProviderSer
 
     const paymentMethod = data.paymentMethod;
 
+    if (!paymentMethod) {
+      return {
+        calculated_amount: 0,
+        is_calculated_price_tax_inclusive: false,
+      };
+    }
+
+    console.log("Shipping Address", JSON.stringify(shipping_address, null, 2));
+
     if (!shipping_address?.postal_code) {
       throw new Error("Delivery pincode missing");
     }
