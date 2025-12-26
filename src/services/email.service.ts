@@ -307,3 +307,154 @@ export async function sendOrderConfirmationEmail(order: OrderData | any): Promis
     throw error;
   }
 }
+
+/**
+ * Generate password reset email HTML template
+ */
+function generatePasswordResetEmailTemplate(customerName: string, resetUrl: string): string {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Reset Your Password</title>
+    </head>
+    <body style="font-family: 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5;">
+      <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 0;">
+        <!-- Header -->
+        <div style="background-color: #2c3e50; padding: 30px 20px; text-align: center;">
+          <h1 style="color: #ffffff; margin: 0; font-size: 28px;">Password Reset Request</h1>
+        </div>
+        
+        <!-- Content -->
+        <div style="padding: 30px 20px;">
+          <p style="font-size: 16px; margin-bottom: 10px;">Dear ${customerName},</p>
+          <p style="font-size: 16px; color: #666; margin-bottom: 20px;">We received a request to reset your password for your Jardin Botanica account.</p>
+          
+          <!-- Reset Button -->
+          <div style="text-align: center; margin: 40px 0;">
+            <a href="${resetUrl}" style="display: inline-block; background-color: #2c3e50; color: #ffffff; padding: 15px 40px; text-decoration: none; border-radius: 5px; font-size: 16px; font-weight: bold;">Reset Password</a>
+          </div>
+          
+          <!-- Instructions -->
+          <div style="background-color: #f8f9fa; padding: 20px; margin: 20px 0; border-radius: 8px; border-left: 4px solid #2c3e50;">
+            <p style="margin: 0 0 10px 0; color: #666; font-size: 14px;">If the button above doesn't work, copy and paste the following link into your browser:</p>
+            <p style="margin: 0; color: #2c3e50; font-size: 14px; word-break: break-all;">${resetUrl}</p>
+          </div>
+
+          <!-- Security Note -->
+          <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #e0e0e0;">
+            <p style="color: #666; font-size: 14px; margin-bottom: 10px;"><strong>Important:</strong></p>
+            <ul style="color: #666; font-size: 14px; margin: 10px 0; padding-left: 20px;">
+              <li>This link will expire in 15 minutes for security reasons</li>
+              <li>If you didn't request this password reset, you can safely ignore this email</li>
+              <li>Your password won't change until you access the link above and create a new one</li>
+            </ul>
+          </div>
+        </div>
+        
+        <!-- Footer -->
+        <div style="background-color: #f8f9fa; padding: 20px; text-align: center; color: #666; font-size: 12px; border-top: 1px solid #e0e0e0;">
+          <p style="margin: 0;">This is an automated email. Please do not reply to this message.</p>
+          <p style="margin: 10px 0 0 0;">© Jardin Botanica. All rights reserved.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+/**
+ * Send password reset email to customer
+ * @param email - Customer email address
+ * @param token - Password reset token
+ * @param customerName - Customer's name (optional)
+ */
+export async function sendPasswordResetEmail(
+  email: string,
+  token: string,
+  customerName: string = "Customer"
+): Promise<void> {
+  try {
+    const testEmail = "abhishek1561998@gmail.com";
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
+    const isTestMode = fromEmail === 'onboarding@resend.dev';
+    
+    // Get frontend URL from environment variables
+    // STORE_CORS may contain multiple URLs (comma-separated), so we take the first one
+    let frontendUrl = process.env.FRONTEND_URL || process.env.STORE_CORS || 'http://localhost:8000';
+    
+    // If frontendUrl contains multiple URLs (comma-separated), take the first one
+    if (frontendUrl.includes(',')) {
+      frontendUrl = frontendUrl.split(',')[0].trim();
+    }
+    
+    // Get default country code from environment or use 'in' as default
+    const defaultCountryCode = process.env.DEFAULT_COUNTRY_CODE || 'in';
+    
+    console.log('🌐 Using frontend URL for reset link:', frontendUrl);
+    console.log('🌍 Using country code:', defaultCountryCode);
+    
+    // Construct reset URL with token and email
+    const resetUrl = `${frontendUrl}/${defaultCountryCode}/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
+    
+    // Get recipient emails based on mode
+    const recipientEmails = isTestMode ? [testEmail] : [email, testEmail];
+    
+    if (isTestMode) {
+      console.log('⚠️  Test mode detected - only sending to test email due to Resend restrictions');
+      console.log(`ℹ️  Customer email (${email}) will be skipped in test mode`);
+    }
+    
+    // Initialize Resend client
+    const resendApiKey = process.env.RESEND_API_KEY || 're_6vVfXKF3_49nTkiv9ehQQ2oxGkoHpw6ah';
+    
+    console.log('📧 Preparing to send password reset email...');
+    console.log('From:', fromEmail);
+    console.log('To:', recipientEmails);
+    console.log('Mode:', isTestMode ? 'TEST MODE (Resend restrictions apply)' : 'PRODUCTION MODE');
+    
+    const resend = new Resend(resendApiKey);
+    
+    // Generate email HTML
+    const emailHtml = generatePasswordResetEmailTemplate(customerName, resetUrl);
+    
+    // Send email
+    const emailResult = await resend.emails.send({
+      from: fromEmail,
+      to: recipientEmails,
+      subject: 'Reset Your Password - Jardin Botanica',
+      html: emailHtml,
+    });
+    
+    // Log detailed response
+    console.log('📬 Email API Response:', JSON.stringify(emailResult, null, 2));
+    
+    if (emailResult.error) {
+      console.error('❌ Resend API Error:', emailResult.error);
+      
+      // If it's a validation error about test mode, log it but don't throw
+      const error = emailResult.error as any;
+      if (error.statusCode === 403 && error.message?.includes('testing emails')) {
+        console.warn('⚠️  Resend test mode restriction: Only your own email can receive emails in test mode');
+        console.warn('💡 Solution: Verify a domain at resend.com/domains to send to all recipients');
+        return;
+      }
+      
+      throw new Error(`Failed to send email: ${JSON.stringify(emailResult.error)}`);
+    }
+    
+    if (emailResult.data) {
+      console.log('✅ Password reset email sent successfully!');
+      console.log('Email ID:', emailResult.data.id);
+      console.log('Recipients:', recipientEmails.join(', '));
+    } else {
+      console.warn('⚠️ Unexpected response from Resend API:', emailResult);
+    }
+  } catch (error: any) {
+    console.error("❌ Error sending password reset email:");
+    console.error("Error message:", error?.message || error);
+    throw error;
+  }
+}
