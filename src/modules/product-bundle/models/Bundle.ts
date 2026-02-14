@@ -1,0 +1,16 @@
+import { model } from "@medusajs/framework/utils";
+
+export const Bundle = model.define("bundle", {
+  id: model.id().primaryKey(),
+  title: model.text(),
+  description: model.text().nullable(),
+  medusa_product_id: model.text().nullable(),
+  medusa_variant_id: model.text().nullable(),
+  bundle_price: model.number(),
+  bundle_image: model.text().nullable(),
+  is_active: model.boolean().default(true),
+  is_featured: model.boolean().default(false),
+  metadata: model.json().nullable(),
+});
+
+export default Bundle;
