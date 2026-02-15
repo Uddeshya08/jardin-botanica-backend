@@ -128,5 +128,10 @@ module.exports = defineConfig({
     //     ],
     //   },
     // },
+
+    // Product Bundle Module
+    {
+      resolve: "./src/modules/product-bundle",
+    },
   ],
 });
