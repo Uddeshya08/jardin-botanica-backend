@@ -360,8 +360,8 @@ const BundlesPage = () => {
                   <Label style={{ display: "block", marginBottom: "8px", color: "#e5e5e5" }}>Bundle Price (₹) *</Label>
                   <Input
                     type="number"
-                    value={formData.bundle_price}
-                    onChange={(e) => setFormData({ ...formData, bundle_price: Number(e.target.value) })}
+                    value={formData.bundle_price || ""}
+                    onChange={(e) => setFormData({ ...formData, bundle_price: Number(e.target.value) || 0 })}
                     placeholder="0"
                     required
                     style={{ width: "200px", backgroundColor: "#2a2a2a", color: "#ffffff", borderColor: "#404040" }}
