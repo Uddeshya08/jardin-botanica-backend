@@ -286,11 +286,11 @@ class DelhiveryFulfillmentProviderService extends AbstractFulfillmentProviderSer
       state: delivery.province,
       country: delivery.country_code,
       weight: totalWeightGrams,
-      payment_mode: paymentMethod === "PREPAID" ? "Prepaid" : "COD",
-      cod_amount: paymentMethod === "COD" ? totalAmount : null,
+      payment_mode: paymentMethod === "PREPAID" ? "Prepaid" as const : "COD" as const,
+      cod_amount: paymentMethod === "COD" ? Number(totalAmount) : undefined,
       shipping_mode: validShippingMode,
       products_desc: products_desc,
-      total_amount: totalAmount,
+      total_amount: Number(totalAmount),
       quantity: items.reduce((sum, i) => sum + (i.quantity || 1), 0).toString(),
     };
 
