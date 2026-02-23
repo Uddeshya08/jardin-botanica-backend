@@ -27,6 +27,12 @@ services:
         delay: 10s
         max_attempts: 5
         window: 120s
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        monitor: 60s
+        max_failure_ratio: 0.1
     logging:
       driver: json-file
       options:
