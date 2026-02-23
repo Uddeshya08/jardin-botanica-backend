@@ -5,7 +5,6 @@ RUN corepack enable && corepack prepare yarn@4.3.1 --activate
 WORKDIR /app
 
 COPY package.json yarn.lock .yarnrc.yml ./
-COPY .yarn ./.yarn
 
 RUN --mount=type=cache,target=/root/.yarn,sharing=locked \
     yarn install --frozen-lockfile
