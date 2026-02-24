@@ -67,3 +67,5 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           user: ${{ secrets.DEPLOY_USER }}
           ssh_key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+        env:
+          ENV_FILE: ${{ secrets.ENV_FILE }}
