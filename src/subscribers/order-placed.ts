@@ -38,7 +38,7 @@ export default async function handleOrderPlaced({
     }
 
     // Build items to fulfill
-    const itemsToFulfill = order.items.map((item) => ({
+    const itemsToFulfill = order.items.filter((item): item is NonNullable<typeof item> => item !== null).map((item) => ({
       id: item.id,
       quantity: item.quantity,
     }));
