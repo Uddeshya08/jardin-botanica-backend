@@ -46,13 +46,25 @@ const BundleList = () => {
     if (!confirm("Are you sure you want to delete this bundle?")) return;
     
     try {
-      await fetch(`/admin/bundles/${id}`, {
+      const response = await fetch(`/admin/bundles/${id}`, {
         method: "DELETE",
         credentials: "include",
       });
+
+      if (!response.ok) {
+        let message = "Failed to delete bundle";
+        try {
+          const error = await response.json();
+          message = error?.message || message;
+        } catch {}
+        alert(message);
+        return;
+      }
+
       fetchBundles();
     } catch (error) {
       console.error("Error deleting bundle:", error);
+      alert("Error deleting bundle");
     }
   };
 

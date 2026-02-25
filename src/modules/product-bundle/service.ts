@@ -3,12 +3,14 @@ import { Bundle } from "./models/Bundle";
 import { BundleItem } from "./models/BundleItem";
 import { ChoiceSlot } from "./models/ChoiceSlot";
 import { ChoiceOption } from "./models/ChoiceOption";
+import { BundleText } from "./models/BundleText";
 
 class ProductBundleService extends MedusaService({
   Bundle,
   BundleItem,
   ChoiceSlot,
   ChoiceOption,
+  BundleText,
 }) {
   async createBundle(data: {
     title: string;
@@ -22,6 +24,10 @@ class ProductBundleService extends MedusaService({
     items?: Array<{
       medusa_variant_id: string;
       quantity: number;
+      sort_order?: number;
+    }>;
+    bundle_texts?: Array<{
+      text: string;
       sort_order?: number;
     }>;
     choice_slots?: Array<{
@@ -38,7 +44,7 @@ class ProductBundleService extends MedusaService({
       }>;
     }>;
   }) {
-    const { items, choice_slots, ...bundleData } = data;
+    const { items, choice_slots, bundle_texts, ...bundleData } = data;
 
     const bundle = await this.createBundles(bundleData);
 
@@ -50,6 +56,15 @@ class ProductBundleService extends MedusaService({
         sort_order: item.sort_order ?? index,
       }));
       await this.createBundleItems(bundleItems);
+    }
+
+    if (bundle_texts && bundle_texts.length > 0) {
+      const texts = bundle_texts.map((entry, index) => ({
+        bundle_id: bundle.id,
+        text: entry.text,
+        sort_order: entry.sort_order ?? index,
+      }));
+      await this.createBundleTexts(texts);
     }
 
     if (choice_slots && choice_slots.length > 0) {
@@ -77,7 +92,7 @@ class ProductBundleService extends MedusaService({
     }
 
     return this.retrieveBundle(bundle.id, {
-      relations: ["items", "choice_slots", "choice_slots.options"],
+      relations: ["items", "bundle_texts", "choice_slots", "choice_slots.options"],
     });
   }
 
@@ -97,6 +112,10 @@ class ProductBundleService extends MedusaService({
         quantity: number;
         sort_order?: number;
       }>;
+      bundle_texts?: Array<{
+        text: string;
+        sort_order?: number;
+      }>;
       choice_slots?: Array<{
         slot_name: string;
         slot_description?: string;
@@ -112,7 +131,7 @@ class ProductBundleService extends MedusaService({
       }>;
     }
   ) {
-    const { items, choice_slots, ...bundleData } = data;
+    const { items, choice_slots, bundle_texts, ...bundleData } = data;
     
     await this.updateBundles({ id, ...bundleData });
     
@@ -130,6 +149,22 @@ class ProductBundleService extends MedusaService({
           sort_order: item.sort_order ?? index,
         }));
         await this.createBundleItems(bundleItems);
+      }
+    }
+
+    if (bundle_texts !== undefined) {
+      const existingTexts = await this.listBundleTexts({ bundle_id: id });
+      for (const entry of existingTexts) {
+        await this.deleteBundleTexts(entry.id);
+      }
+
+      if (bundle_texts.length > 0) {
+        const texts = bundle_texts.map((entry, index) => ({
+          bundle_id: id,
+          text: entry.text,
+          sort_order: entry.sort_order ?? index,
+        }));
+        await this.createBundleTexts(texts);
       }
     }
     
@@ -172,6 +207,7 @@ class ProductBundleService extends MedusaService({
     if (!bundle) return null;
 
     const updatedItems = await this.listBundleItems({ bundle_id: id });
+    const bundleTexts = await this.listBundleTexts({ bundle_id: id });
     const choiceSlots = await this.listChoiceSlots({ bundle_id: id });
 
     const choiceSlotsWithOptions = await Promise.all(
@@ -181,7 +217,12 @@ class ProductBundleService extends MedusaService({
       })
     );
 
-    return { ...bundle, items: updatedItems || [], choice_slots: choiceSlotsWithOptions || [] };
+    return {
+      ...bundle,
+      items: updatedItems || [],
+      bundle_texts: (bundleTexts || []).sort((a, b) => a.sort_order - b.sort_order),
+      choice_slots: choiceSlotsWithOptions || [],
+    };
   }
 
   async addBundleItem(data: {
@@ -245,11 +286,43 @@ class ProductBundleService extends MedusaService({
     await this.deleteChoiceSlots(id);
   }
 
+  async deleteBundleWithRelations(id: string): Promise<void> {
+    const bundle = await this.getBundleWithDetails(id);
+    if (!bundle) {
+      throw new Error("Bundle not found");
+    }
+
+    const choiceSlots = await this.listChoiceSlots({ bundle_id: id });
+    for (const slot of choiceSlots) {
+      const options = await this.listChoiceOptions({ choice_slot_id: slot.id });
+      if (options.length) {
+        await this.deleteChoiceOptions(options.map((option) => option.id));
+      }
+    }
+
+    if (choiceSlots.length) {
+      await this.deleteChoiceSlots(choiceSlots.map((slot) => slot.id));
+    }
+
+    const items = await this.listBundleItems({ bundle_id: id });
+    if (items.length) {
+      await this.deleteBundleItems(items.map((item) => item.id));
+    }
+
+    const texts = await this.listBundleTexts({ bundle_id: id });
+    if (texts.length) {
+      await this.deleteBundleTexts(texts.map((entry) => entry.id));
+    }
+
+    await this.deleteBundles(id);
+  }
+
   async getBundleWithDetails(id: string) {
     const bundle = await this.retrieveBundle(id);
     if (!bundle) return null;
 
     const items = await this.listBundleItems({ bundle_id: id });
+    const bundleTexts = await this.listBundleTexts({ bundle_id: id });
     const choiceSlots = await this.listChoiceSlots({ bundle_id: id });
 
     const choiceSlotsWithOptions = await Promise.all(
@@ -259,7 +332,12 @@ class ProductBundleService extends MedusaService({
       })
     );
 
-    return { ...bundle, items: items || [], choice_slots: choiceSlotsWithOptions || [] };
+    return {
+      ...bundle,
+      items: items || [],
+      bundle_texts: (bundleTexts || []).sort((a, b) => a.sort_order - b.sort_order),
+      choice_slots: choiceSlotsWithOptions || [],
+    };
   }
 
   async listBundlesWithDetails() {
@@ -268,6 +346,7 @@ class ProductBundleService extends MedusaService({
     const bundlesWithDetails = await Promise.all(
       bundles.map(async (bundle) => {
         const items = await this.listBundleItems({ bundle_id: bundle.id });
+        const bundleTexts = await this.listBundleTexts({ bundle_id: bundle.id });
         const choiceSlots = await this.listChoiceSlots({ bundle_id: bundle.id });
 
         const choiceSlotsWithOptions = await Promise.all(
@@ -277,7 +356,12 @@ class ProductBundleService extends MedusaService({
           })
         );
 
-        return { ...bundle, items: items || [], choice_slots: choiceSlotsWithOptions || [] };
+        return {
+          ...bundle,
+          items: items || [],
+          bundle_texts: (bundleTexts || []).sort((a, b) => a.sort_order - b.sort_order),
+          choice_slots: choiceSlotsWithOptions || [],
+        };
       })
     );
 

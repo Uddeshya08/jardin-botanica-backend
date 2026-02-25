@@ -1,6 +1,7 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { PRODUCT_BUNDLE_MODULE } from "../../../../modules/product-bundle";
 import ProductBundleService from "../../../../modules/product-bundle/service";
+import { ContainerRegistrationKeys, Modules } from "@medusajs/framework/utils";
 import { z } from "zod";
 
 const updateBundleSchema = z.object({
@@ -18,6 +19,14 @@ const updateBundleSchema = z.object({
       z.object({
         medusa_variant_id: z.string(),
         quantity: z.number().default(1),
+        sort_order: z.number().optional(),
+      })
+    )
+    .optional(),
+  bundle_texts: z
+    .array(
+      z.object({
+        text: z.string().max(300),
         sort_order: z.number().optional(),
       })
     )
@@ -87,7 +96,53 @@ export async function DELETE(
   );
 
   const { id } = req.params;
-  await productBundleService.deleteBundles(id);
+
+  try {
+    const bundle = await productBundleService.getBundleWithDetails(id);
+
+    if (!bundle) {
+      res.status(404).json({ message: "Bundle not found" });
+      return;
+    }
+
+    const link = req.scope.resolve(ContainerRegistrationKeys.LINK);
+    const query = req.scope.resolve(ContainerRegistrationKeys.QUERY);
+
+    const { data: productBundleLinks } = await query.graph({
+      entity: "product_bundle",
+      fields: ["product_id", "bundle_id"],
+      filters: { bundle_id: id },
+    });
+
+    const productIds = new Set<string>(
+      (productBundleLinks || []).map((entry: any) => entry.product_id).filter(Boolean)
+    );
+
+    if (bundle.medusa_product_id) {
+      productIds.add(bundle.medusa_product_id);
+    }
+
+    if (productIds.size > 0) {
+      const linksToDismiss = Array.from(productIds).map((productId) => ({
+        [Modules.PRODUCT]: {
+          product_id: productId,
+        },
+        [PRODUCT_BUNDLE_MODULE]: {
+          bundle_id: id,
+        },
+      }));
+
+      await link.dismiss(linksToDismiss);
+    }
+
+    await productBundleService.deleteBundleWithRelations(id);
+  } catch (error: any) {
+    console.error("Error deleting bundle:", error);
+    res.status(400).json({
+      message: error?.message || "Failed to delete bundle",
+    });
+    return;
+  }
 
   res.status(200).json({ message: "Bundle deleted successfully" });
 }

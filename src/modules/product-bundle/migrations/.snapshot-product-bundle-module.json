@@ -169,15 +169,6 @@
           "nullable": false,
           "mappedType": "text"
         },
-        "bundle_id": {
-          "name": "bundle_id",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": false,
-          "mappedType": "text"
-        },
         "medusa_variant_id": {
           "name": "medusa_variant_id",
           "type": "text",
@@ -206,6 +197,15 @@
           "nullable": false,
           "default": "0",
           "mappedType": "integer"
+        },
+        "bundle_id": {
+          "name": "bundle_id",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "text"
         },
         "created_at": {
           "name": "created_at",
@@ -244,6 +244,15 @@
       "schema": "public",
       "indexes": [
         {
+          "keyName": "IDX_bundle_item_bundle_id",
+          "columnNames": [],
+          "composite": false,
+          "constraint": false,
+          "primary": false,
+          "unique": false,
+          "expression": "CREATE INDEX IF NOT EXISTS \"IDX_bundle_item_bundle_id\" ON \"bundle_item\" (bundle_id) WHERE deleted_at IS NULL"
+        },
+        {
           "keyName": "IDX_bundle_item_deleted_at",
           "columnNames": [],
           "composite": false,
@@ -264,7 +273,20 @@
         }
       ],
       "checks": [],
-      "foreignKeys": {},
+      "foreignKeys": {
+        "bundle_item_bundle_id_foreign": {
+          "constraintName": "bundle_item_bundle_id_foreign",
+          "columnNames": [
+            "bundle_id"
+          ],
+          "localTableName": "public.bundle_item",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.bundle",
+          "updateRule": "cascade"
+        }
+      },
       "nativeEnums": {}
     },
     {
@@ -278,33 +300,14 @@
           "nullable": false,
           "mappedType": "text"
         },
-        "choice_slot_id": {
-          "name": "choice_slot_id",
+        "text": {
+          "name": "text",
           "type": "text",
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
           "nullable": false,
           "mappedType": "text"
-        },
-        "medusa_variant_id": {
-          "name": "medusa_variant_id",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": false,
-          "mappedType": "text"
-        },
-        "quantity": {
-          "name": "quantity",
-          "type": "integer",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": false,
-          "default": "1",
-          "mappedType": "integer"
         },
         "sort_order": {
           "name": "sort_order",
@@ -315,6 +318,15 @@
           "nullable": false,
           "default": "0",
           "mappedType": "integer"
+        },
+        "bundle_id": {
+          "name": "bundle_id",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "text"
         },
         "created_at": {
           "name": "created_at",
@@ -349,20 +361,29 @@
           "mappedType": "datetime"
         }
       },
-      "name": "choice_option",
+      "name": "bundle_text",
       "schema": "public",
       "indexes": [
         {
-          "keyName": "IDX_choice_option_deleted_at",
+          "keyName": "IDX_bundle_text_bundle_id",
           "columnNames": [],
           "composite": false,
           "constraint": false,
           "primary": false,
           "unique": false,
-          "expression": "CREATE INDEX IF NOT EXISTS \"IDX_choice_option_deleted_at\" ON \"choice_option\" (deleted_at) WHERE deleted_at IS NULL"
+          "expression": "CREATE INDEX IF NOT EXISTS \"IDX_bundle_text_bundle_id\" ON \"bundle_text\" (bundle_id) WHERE deleted_at IS NULL"
         },
         {
-          "keyName": "choice_option_pkey",
+          "keyName": "IDX_bundle_text_deleted_at",
+          "columnNames": [],
+          "composite": false,
+          "constraint": false,
+          "primary": false,
+          "unique": false,
+          "expression": "CREATE INDEX IF NOT EXISTS \"IDX_bundle_text_deleted_at\" ON \"bundle_text\" (deleted_at) WHERE deleted_at IS NULL"
+        },
+        {
+          "keyName": "bundle_text_pkey",
           "columnNames": [
             "id"
           ],
@@ -373,22 +394,26 @@
         }
       ],
       "checks": [],
-      "foreignKeys": {},
+      "foreignKeys": {
+        "bundle_text_bundle_id_foreign": {
+          "constraintName": "bundle_text_bundle_id_foreign",
+          "columnNames": [
+            "bundle_id"
+          ],
+          "localTableName": "public.bundle_text",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.bundle",
+          "updateRule": "cascade"
+        }
+      },
       "nativeEnums": {}
     },
     {
       "columns": {
         "id": {
           "name": "id",
-          "type": "text",
-          "unsigned": false,
-          "autoincrement": false,
-          "primary": false,
-          "nullable": false,
-          "mappedType": "text"
-        },
-        "bundle_id": {
-          "name": "bundle_id",
           "type": "text",
           "unsigned": false,
           "autoincrement": false,
@@ -454,6 +479,15 @@
           "default": "0",
           "mappedType": "integer"
         },
+        "bundle_id": {
+          "name": "bundle_id",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "text"
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamptz",
@@ -491,6 +525,15 @@
       "schema": "public",
       "indexes": [
         {
+          "keyName": "IDX_choice_slot_bundle_id",
+          "columnNames": [],
+          "composite": false,
+          "constraint": false,
+          "primary": false,
+          "unique": false,
+          "expression": "CREATE INDEX IF NOT EXISTS \"IDX_choice_slot_bundle_id\" ON \"choice_slot\" (bundle_id) WHERE deleted_at IS NULL"
+        },
+        {
           "keyName": "IDX_choice_slot_deleted_at",
           "columnNames": [],
           "composite": false,
@@ -511,7 +554,151 @@
         }
       ],
       "checks": [],
-      "foreignKeys": {},
+      "foreignKeys": {
+        "choice_slot_bundle_id_foreign": {
+          "constraintName": "choice_slot_bundle_id_foreign",
+          "columnNames": [
+            "bundle_id"
+          ],
+          "localTableName": "public.choice_slot",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.bundle",
+          "updateRule": "cascade"
+        }
+      },
+      "nativeEnums": {}
+    },
+    {
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "text"
+        },
+        "medusa_variant_id": {
+          "name": "medusa_variant_id",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "text"
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "integer",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "default": "1",
+          "mappedType": "integer"
+        },
+        "sort_order": {
+          "name": "sort_order",
+          "type": "integer",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "default": "0",
+          "mappedType": "integer"
+        },
+        "choice_slot_id": {
+          "name": "choice_slot_id",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "mappedType": "text"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 6,
+          "default": "now()",
+          "mappedType": "datetime"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "length": 6,
+          "default": "now()",
+          "mappedType": "datetime"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamptz",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "length": 6,
+          "mappedType": "datetime"
+        }
+      },
+      "name": "choice_option",
+      "schema": "public",
+      "indexes": [
+        {
+          "keyName": "IDX_choice_option_choice_slot_id",
+          "columnNames": [],
+          "composite": false,
+          "constraint": false,
+          "primary": false,
+          "unique": false,
+          "expression": "CREATE INDEX IF NOT EXISTS \"IDX_choice_option_choice_slot_id\" ON \"choice_option\" (choice_slot_id) WHERE deleted_at IS NULL"
+        },
+        {
+          "keyName": "IDX_choice_option_deleted_at",
+          "columnNames": [],
+          "composite": false,
+          "constraint": false,
+          "primary": false,
+          "unique": false,
+          "expression": "CREATE INDEX IF NOT EXISTS \"IDX_choice_option_deleted_at\" ON \"choice_option\" (deleted_at) WHERE deleted_at IS NULL"
+        },
+        {
+          "keyName": "choice_option_pkey",
+          "columnNames": [
+            "id"
+          ],
+          "composite": false,
+          "constraint": true,
+          "primary": true,
+          "unique": true
+        }
+      ],
+      "checks": [],
+      "foreignKeys": {
+        "choice_option_choice_slot_id_foreign": {
+          "constraintName": "choice_option_choice_slot_id_foreign",
+          "columnNames": [
+            "choice_slot_id"
+          ],
+          "localTableName": "public.choice_option",
+          "referencedColumnNames": [
+            "id"
+          ],
+          "referencedTableName": "public.choice_slot",
+          "updateRule": "cascade"
+        }
+      },
       "nativeEnums": {}
     }
   ],

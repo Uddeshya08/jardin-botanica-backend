@@ -22,6 +22,7 @@ interface Bundle {
   is_featured: boolean;
   medusa_variant_id?: string;
   items?: any[];
+  bundle_texts?: any[];
   choice_slots?: any[];
 }
 
@@ -41,6 +42,11 @@ interface ChoiceSlot {
   options: any[];
 }
 
+interface BundleTextEntry {
+  text: string;
+  sort_order: number;
+}
+
 const BundlesPage = () => {
   const [bundles, setBundles] = useState<Bundle[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,6 +62,7 @@ const BundlesPage = () => {
     is_featured: false,
     medusa_variant_id: "",
     items: [] as BundleItem[],
+    bundle_texts: [] as BundleTextEntry[],
     choice_slots: [] as ChoiceSlot[],
   });
 
@@ -78,37 +85,55 @@ const BundlesPage = () => {
 
   const fetchProducts = async () => {
     try {
-      const response = await fetch("/admin/products?limit=100", { credentials: "include" });
-      const data = await response.json();
-      console.log("Products API response:", data);
-      
-      let allVariants: any[] = [];
-      
-      if (data.products && data.products.length > 0) {
-        data.products.forEach((product: any) => {
-          if (product.variants && product.variants.length > 0) {
-            product.variants.forEach((variant: any) => {
-              allVariants.push({
-                id: variant.id,
-                title: variant.title || product.title,
-                productTitle: product.title
-              });
-            });
-          } else {
-            // If no variants, add the product itself as an option
-            allVariants.push({
-              id: product.id,
-              title: product.title,
-              productTitle: product.title
-            });
-          }
+      const limit = 100;
+      let offset = 0;
+      let totalCount = Number.MAX_SAFE_INTEGER;
+      const dedupedVariants = new Map<string, { id: string; title: string; productTitle: string }>();
+
+      while (offset < totalCount) {
+        const query = new URLSearchParams({
+          limit: String(limit),
+          offset: String(offset),
+          fields: "id,title,product_id,product.title",
         });
+
+        const response = await fetch(`/admin/product-variants?${query.toString()}`, {
+          credentials: "include",
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch variants (${response.status})`);
+        }
+
+        const data = await response.json();
+        const variants = data?.variants || [];
+        totalCount = Number(data?.count || 0);
+
+        for (const variant of variants) {
+          if (!variant?.id) continue;
+          const productTitle = variant?.product?.title || "Unknown Product";
+          const variantTitle = variant?.title || productTitle || "Untitled Variant";
+
+          dedupedVariants.set(variant.id, {
+            id: variant.id,
+            title: variantTitle,
+            productTitle,
+          });
+        }
+
+        if (variants.length === 0) {
+          break;
+        }
+
+        offset += limit;
       }
-      
+
+      const allVariants = Array.from(dedupedVariants.values());
       console.log("All variants:", allVariants);
       setProducts(allVariants);
     } catch (error) {
       console.error("Error fetching products:", error);
+      setProducts([]);
     }
   };
 
@@ -125,6 +150,7 @@ const BundlesPage = () => {
       is_featured: false,
       medusa_variant_id: "",
       items: [],
+      bundle_texts: [],
       choice_slots: [],
     });
     setShowForm(true);
@@ -143,6 +169,10 @@ const BundlesPage = () => {
         medusa_variant_id: item.medusa_variant_id,
         quantity: item.quantity,
         sort_order: item.sort_order,
+      })) || [],
+      bundle_texts: bundle.bundle_texts?.map((entry: any) => ({
+        text: entry.text || "",
+        sort_order: entry.sort_order ?? 0,
       })) || [],
       choice_slots: bundle.choice_slots?.map((slot: any) => ({
         slot_name: slot.slot_name,
@@ -164,10 +194,22 @@ const BundlesPage = () => {
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this bundle?")) return;
     try {
-      await fetch(`/admin/bundles/${id}`, { method: "DELETE", credentials: "include" });
+      const response = await fetch(`/admin/bundles/${id}`, { method: "DELETE", credentials: "include" });
+
+      if (!response.ok) {
+        let message = "Failed to delete bundle";
+        try {
+          const error = await response.json();
+          message = error?.message || message;
+        } catch {}
+        alert(message);
+        return;
+      }
+
       fetchBundles();
     } catch (error) {
       console.error("Error deleting bundle:", error);
+      alert("Error deleting bundle");
     }
   };
 
@@ -227,6 +269,26 @@ const BundlesPage = () => {
         options: [],
       }],
     });
+  };
+
+  const addBundleText = () => {
+    setFormData({
+      ...formData,
+      bundle_texts: [...formData.bundle_texts, { text: "", sort_order: formData.bundle_texts.length }],
+    });
+  };
+
+  const updateBundleText = (index: number, value: string) => {
+    const newTexts = [...formData.bundle_texts];
+    newTexts[index] = { ...newTexts[index], text: value };
+    setFormData({ ...formData, bundle_texts: newTexts });
+  };
+
+  const removeBundleText = (index: number) => {
+    const newTexts = formData.bundle_texts
+      .filter((_, i) => i !== index)
+      .map((entry, i) => ({ ...entry, sort_order: i }));
+    setFormData({ ...formData, bundle_texts: newTexts });
   };
 
   const removeChoiceSlot = (index: number) => {
@@ -470,6 +532,43 @@ const BundlesPage = () => {
                             />
                           </div>
                           <Button type="button" variant="secondary" onClick={() => removeItem(index)}>
+                            <span style={{ fontSize: "18px", cursor: "pointer" }}>×</span>
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <hr style={{ border: "none", borderTop: "1px solid #404040" }} />
+
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                    <Heading level="h3">Bundle Texts (display-only)</Heading>
+                    <Button type="button" variant="secondary" onClick={addBundleText}>
+                      <Plus /> Add Text
+                    </Button>
+                  </div>
+                  {formData.bundle_texts.length === 0 ? (
+                    <Text style={{ color: "#888" }}>
+                      No bundle texts added. Add display text entries for storefront UI.
+                    </Text>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                      {formData.bundle_texts.map((entry, index) => (
+                        <div key={index} style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
+                          <div style={{ flex: 1 }}>
+                            <Textarea
+                              value={entry.text}
+                              onChange={(e) => updateBundleText(index, e.target.value.slice(0, 300))}
+                              placeholder="Enter bundle display text..."
+                              style={{ width: "100%", backgroundColor: "#2a2a2a", color: "#ffffff", borderColor: "#404040" }}
+                            />
+                            <Text size="small" style={{ color: "#888", marginTop: "4px" }}>
+                              {entry.text.length}/300
+                            </Text>
+                          </div>
+                          <Button type="button" variant="secondary" onClick={() => removeBundleText(index)}>
                             <span style={{ fontSize: "18px", cursor: "pointer" }}>×</span>
                           </Button>
                         </div>
