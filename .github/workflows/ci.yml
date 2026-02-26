@@ -71,39 +71,39 @@ jobs:
           docker push uddeshyaus/jd-backend:latest
           docker push uddeshyaus/jd-backend:${{ github.sha }}
 
-  db-migrate:
-    runs-on: ubuntu-latest
-    needs: [build-and-push-image]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - name: Run migrations
-        uses: appleboy/ssh-action@v1
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
-          envs: DATABASE_URL,DEPLOY_USER
-          script: |
-            #!/bin/bash
-            set -eu
-            export HOME="/home/$DEPLOY_USER"
-            export NVM_DIR="$HOME/.nvm"
-            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-            nvm use v22.22.0
-            TMP_DIR="/tmp/jd-migrate"
-            cleanup() {
-              rm -rf "$TMP_DIR"
-            }
-            trap cleanup EXIT
-            rm -rf "$TMP_DIR"
-            git clone --depth 1 --branch main https://github.com/Uddeshya08/jardin-botanica-backend.git "$TMP_DIR"
-            cd "$TMP_DIR"
-            corepack enable
-            yarn install --immutable
-            npx medusa db:migrate
+  # db-migrate:
+  #   runs-on: ubuntu-latest
+  #   needs: [build-and-push-image]
+  #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  #   steps:
+  #     - name: Run migrations
+  #       uses: appleboy/ssh-action@v1
+  #       env:
+  #         DATABASE_URL: ${{ secrets.DATABASE_URL }}
+  #         DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+  #       with:
+  #         host: ${{ secrets.DEPLOY_HOST }}
+  #         username: ${{ secrets.DEPLOY_USER }}
+  #         key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+  #         envs: DATABASE_URL,DEPLOY_USER
+  #         script: |
+  #           #!/bin/bash
+  #           set -eu
+  #           export HOME="/home/$DEPLOY_USER"
+  #           export NVM_DIR="$HOME/.nvm"
+  #           [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+  #           nvm use v22.22.0
+  #           TMP_DIR="/tmp/jd-migrate"
+  #           cleanup() {
+  #             rm -rf "$TMP_DIR"
+  #           }
+  #           trap cleanup EXIT
+  #           rm -rf "$TMP_DIR"
+  #           git clone --depth 1 --branch main https://github.com/Uddeshya08/jardin-botanica-backend.git "$TMP_DIR"
+  #           cd "$TMP_DIR"
+  #           corepack enable
+  #           yarn install --immutable
+  #           npx medusa db:migrate
 
   deploy:
     runs-on: ubuntu-latest
