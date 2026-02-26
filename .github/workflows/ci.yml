@@ -87,7 +87,7 @@ jobs:
           envs: DATABASE_URL
           script: |
             #!/bin/bash
-            set -euo pipefail
+            set -eu
             TMP_DIR="/tmp/jd-migrate"
             cleanup() {
               rm -rf "$TMP_DIR"
