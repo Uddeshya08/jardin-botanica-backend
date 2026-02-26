@@ -80,14 +80,16 @@ jobs:
         uses: appleboy/ssh-action@v1
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
-          envs: DATABASE_URL
+          envs: DATABASE_URL,DEPLOY_USER
           script: |
             #!/bin/bash
             set -eu
+            export HOME="/home/$DEPLOY_USER"
             export NVM_DIR="$HOME/.nvm"
             [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
             nvm use v22.22.0
