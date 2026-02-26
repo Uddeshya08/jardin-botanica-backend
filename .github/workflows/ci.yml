@@ -86,6 +86,7 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
           envs: DATABASE_URL
           script: |
+            #!/bin/bash
             set -euo pipefail
             TMP_DIR="/tmp/jd-migrate"
             cleanup() {
