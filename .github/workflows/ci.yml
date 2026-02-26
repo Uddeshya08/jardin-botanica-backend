@@ -88,6 +88,7 @@ jobs:
           script: |
             #!/bin/bash
             set -eu
+            export NVM_DIR="$HOME/.nvm"
             TMP_DIR="/tmp/jd-migrate"
             cleanup() {
               rm -rf "$TMP_DIR"
