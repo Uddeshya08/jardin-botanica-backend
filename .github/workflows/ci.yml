@@ -94,7 +94,7 @@ jobs:
             }
             trap cleanup EXIT
             rm -rf "$TMP_DIR"
-            git clone --depth 1 --branch main https://github.com/uddeshyaus/jardin-botanica-backend "$TMP_DIR"
+            git clone --depth 1 --branch main https://github.com/Uddeshya08/jardin-botanica-backend.git "$TMP_DIR"
             cd "$TMP_DIR"
             corepack enable
             yarn install --immutable
