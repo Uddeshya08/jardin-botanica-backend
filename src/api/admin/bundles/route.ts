@@ -22,6 +22,14 @@ const createBundleSchema = z.object({
       })
     )
     .optional(),
+  bundle_texts: z
+    .array(
+      z.object({
+        text: z.string().max(300),
+        sort_order: z.number().optional(),
+      })
+    )
+    .optional(),
   choice_slots: z
     .array(
       z.object({

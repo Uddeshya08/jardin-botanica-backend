@@ -1,6 +1,7 @@
 import { model } from "@medusajs/framework/utils";
 import { BundleItem } from "./BundleItem";
 import { ChoiceSlot } from "./ChoiceSlot";
+import { BundleText } from "./BundleText";
 
 export const Bundle = model.define("bundle", {
   id: model.id().primaryKey(),
@@ -15,6 +16,7 @@ export const Bundle = model.define("bundle", {
   metadata: model.json().nullable(),
   items: model.hasMany(() => BundleItem, { mappedBy: "bundle" }),
   choice_slots: model.hasMany(() => ChoiceSlot, { mappedBy: "bundle" }),
+  bundle_texts: model.hasMany(() => BundleText, { mappedBy: "bundle" }),
 });
 
 export default Bundle;

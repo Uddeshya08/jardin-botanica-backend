@@ -76,25 +76,28 @@ jobs:
     needs: [build-and-push-image]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '22.x'
-          cache: 'yarn'
-
-      - name: Install dependencies
-        run: yarn install --immutable
-
       - name: Run migrations
-        run: npx medusa db:migrate
+        uses: appleboy/ssh-action@v1
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          envs: DATABASE_URL
+          script: |
+            set -euo pipefail
+            TMP_DIR="/tmp/jd-migrate"
+            cleanup() {
+              rm -rf "$TMP_DIR"
+            }
+            trap cleanup EXIT
+            rm -rf "$TMP_DIR"
+            git clone --depth 1 --branch main https://github.com/uddeshyaus/jardin-botanica-backend "$TMP_DIR"
+            cd "$TMP_DIR"
+            corepack enable
+            yarn install --immutable
+            npx medusa db:migrate
 
   deploy:
     runs-on: ubuntu-latest

@@ -13,6 +13,7 @@ interface BundleMetadata {
   _bundle_id: string;
   _bundle_title: string;
   _bundle_price: number;
+  _bundle_personalized_note?: string;
   _bundle_selections?: Record<string, string[]>;
   _bundle_items?: Array<{
     variant_id: string;
@@ -90,6 +91,15 @@ const OrderBundleDetailsWidget = ({ data: order }: DetailWidgetProps<AdminOrder>
                       ))}
                     </Table.Body>
                   </Table>
+                </div>
+              )}
+
+              {bundleMeta._bundle_personalized_note && (
+                <div style={{ marginBottom: "12px" }}>
+                  <Text style={{ fontWeight: "500", marginBottom: "8px", display: "block" }}>
+                    Personalized Note:
+                  </Text>
+                  <Text>{bundleMeta._bundle_personalized_note}</Text>
                 </div>
               )}
 

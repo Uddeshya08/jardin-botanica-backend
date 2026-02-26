@@ -8,6 +8,7 @@ const addToCartSchema = z.object({
   cart_id: z.string(),
   quantity: z.number().min(1).default(1),
   selections: z.record(z.array(z.string())).optional(),
+  personalized_note: z.string().max(500).optional(),
 });
 
 export async function POST(
@@ -32,8 +33,8 @@ export async function POST(
     return;
   }
   
-  const { cart_id, quantity, selections = {} } = validatedData;
-  console.log("[Bundle Add to Cart] Parsed data:", { cart_id, quantity, selections });
+  const { cart_id, quantity, selections = {}, personalized_note } = validatedData;
+  console.log("[Bundle Add to Cart] Parsed data:", { cart_id, quantity, selections, personalized_note });
 
   const bundle = await productBundleService.getBundleWithDetails(bundleId);
   console.log("[Bundle Add to Cart] Bundle:", bundle);
@@ -144,31 +145,37 @@ export async function POST(
     return;
   }
 
+  const bundleMetadata: Record<string, unknown> = {
+    _bundle_id: bundleId,
+    _bundle_title: bundle.title,
+    _bundle_price: bundle.bundle_price,
+    _bundle_selections: selections,
+    _bundle_items: bundle.items?.map((item: any) => ({
+      variant_id: item.medusa_variant_id,
+      quantity: item.quantity,
+    })) || [],
+    _bundle_choice_items: Object.entries(selections).flatMap(([slotId, optionIds]: [string, any]) => {
+      const slot = bundle.choice_slots?.find((s: any) => s.id === slotId);
+      return (slot?.options || [])
+        .filter((opt: any) => optionIds?.includes(opt.id))
+        .map((opt: any) => ({
+          variant_id: opt.medusa_variant_id,
+          quantity: opt.quantity,
+        }));
+    }),
+  };
+
+  if (personalized_note !== undefined) {
+    bundleMetadata._bundle_personalized_note = personalized_note;
+  }
+
   const bundleLineItemData: any = {
     cart_id: cart_id,
     variant_id: bundle.medusa_variant_id,
     title: bundle.title,
     quantity: quantity,
     unit_price: bundle.bundle_price,
-    metadata: {
-      _bundle_id: bundleId,
-      _bundle_title: bundle.title,
-      _bundle_price: bundle.bundle_price,
-      _bundle_selections: selections,
-      _bundle_items: bundle.items?.map((item: any) => ({
-        variant_id: item.medusa_variant_id,
-        quantity: item.quantity,
-      })) || [],
-      _bundle_choice_items: Object.entries(selections).flatMap(([slotId, optionIds]: [string, any]) => {
-        const slot = bundle.choice_slots?.find((s: any) => s.id === slotId);
-        return (slot?.options || [])
-          .filter((opt: any) => optionIds?.includes(opt.id))
-          .map((opt: any) => ({
-            variant_id: opt.medusa_variant_id,
-            quantity: opt.quantity,
-          }));
-      }),
-    },
+    metadata: bundleMetadata,
   };
 
   console.log("[Bundle Add to Cart] Line item data:", bundleLineItemData);
@@ -182,8 +189,13 @@ export async function POST(
   try {
     if (existingItem) {
       console.log("[Bundle Add to Cart] Updating existing item:", existingItem.id);
+      const updatedMetadata = {
+        ...(existingItem.metadata || {}),
+        ...bundleMetadata,
+      };
       lineItem = await cartModuleService.updateLineItems(existingItem.id, {
         quantity: Number(existingItem.quantity) + quantity,
+        metadata: updatedMetadata,
       });
     } else {
       console.log("[Bundle Add to Cart] Creating new line item");
