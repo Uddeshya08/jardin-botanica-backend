@@ -6,7 +6,7 @@ services:
     ports:
       - "9000:9000"
     env_file:
-      - ${ENV_FILE:-.env}
+      - /opt/jardin-backend/.env
     environment:
       - NODE_ENV=production
     healthcheck:
