@@ -133,5 +133,9 @@ module.exports = defineConfig({
     {
       resolve: "./src/modules/product-bundle",
     },
+    // Customer Preferences Module
+    {
+      resolve: "./src/modules/customer-preferences",
+    },
   ],
 });

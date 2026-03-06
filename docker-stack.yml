@@ -5,10 +5,40 @@ services:
     image: uddeshyaus/jd-backend:latest
     ports:
       - "9000:9000"
-    env_file:
-      - /opt/jardin-backend/.env
-    environment:
-      - NODE_ENV=production
+    secrets:
+      - MEDUSA_ADMIN_ONBOARDING_TYPE
+      - STORE_CORS
+      - ADMIN_CORS
+      - AUTH_CORS
+      - REDIS_URL
+      - JWT_SECRET
+      - COOKIE_SECRET
+      - MEDUSA_ADMIN_ONBOARDING_NEXTJS_DIRECTORY
+      - DATABASE_URL
+      - BACKEND_URL
+      - PGSSLMODE
+      - NODE_ENV
+      - RAZORPAY_ID
+      - RAZORPAY_SECRET
+      - RAZORPAY_ACCOUNT
+      - RAZORPAY_WEBHOOK_SECRET
+      - DELHIVERY_API_TOKEN
+      - DELHIVERY_WAREHOUSE_CODE
+      - DELHIVERY_CLIENT_NAME
+      - RESEND_API_KEY
+      - NEXT_PUBLIC_CONTENTFUL_SPACE_ID
+      - NEXT_PUBLIC_CONTENTFUL_ACCESS_TOKEN
+      - CONTENTFUL_ENV
+      - CONTENTFUL_SPACE_ID
+      - CONTENTFUL_ACCESS_TOKEN
+      - DELHIVERY_BASE_URL
+      - ALLOWED_HOSTS
+      - CONTENTFUL_WEBHOOK_SECRET
+      - GOOGLE_CLIENT_ID
+      - GOOGLE_CLIENT_SECRET
+      - GOOGLE_CALLBACK_URL
+      - NODE_TLS_REJECT_UNAUTHORIZED
+      - WAREHOUSE_PINCODE
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
       interval: 30s
@@ -40,3 +70,71 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+secrets:
+  MEDUSA_ADMIN_ONBOARDING_TYPE:
+    external: true
+  STORE_CORS:
+    external: true
+  ADMIN_CORS:
+    external: true
+  AUTH_CORS:
+    external: true
+  REDIS_URL:
+    external: true
+  JWT_SECRET:
+    external: true
+  COOKIE_SECRET:
+    external: true
+  MEDUSA_ADMIN_ONBOARDING_NEXTJS_DIRECTORY:
+    external: true
+  DATABASE_URL:
+    external: true
+  BACKEND_URL:
+    external: true
+  PGSSLMODE:
+    external: true
+  NODE_ENV:
+    external: true
+  RAZORPAY_ID:
+    external: true
+  RAZORPAY_SECRET:
+    external: true
+  RAZORPAY_ACCOUNT:
+    external: true
+  RAZORPAY_WEBHOOK_SECRET:
+    external: true
+  DELHIVERY_API_TOKEN:
+    external: true
+  DELHIVERY_WAREHOUSE_CODE:
+    external: true
+  DELHIVERY_CLIENT_NAME:
+    external: true
+  RESEND_API_KEY:
+    external: true
+  NEXT_PUBLIC_CONTENTFUL_SPACE_ID:
+    external: true
+  NEXT_PUBLIC_CONTENTFUL_ACCESS_TOKEN:
+    external: true
+  CONTENTFUL_ENV:
+    external: true
+  CONTENTFUL_SPACE_ID:
+    external: true
+  CONTENTFUL_ACCESS_TOKEN:
+    external: true
+  DELHIVERY_BASE_URL:
+    external: true
+  ALLOWED_HOSTS:
+    external: true
+  CONTENTFUL_WEBHOOK_SECRET:
+    external: true
+  GOOGLE_CLIENT_ID:
+    external: true
+  GOOGLE_CLIENT_SECRET:
+    external: true
+  GOOGLE_CALLBACK_URL:
+    external: true
+  NODE_TLS_REJECT_UNAUTHORIZED:
+    external: true
+  WAREHOUSE_PINCODE:
+    external: true
