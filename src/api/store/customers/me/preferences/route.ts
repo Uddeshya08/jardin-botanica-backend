@@ -1,5 +1,6 @@
 import { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { CUSTOMER_PREFERENCES_MODULE } from "../../../../../modules/customer-preferences"
+import CustomerPreferencesService from "../../../../../modules/customer-preferences/service"
 
 export const GET = async (
     req: AuthenticatedMedusaRequest,
@@ -9,7 +10,7 @@ export const GET = async (
 
     const customerPreferencesModuleService = req.scope.resolve(
         CUSTOMER_PREFERENCES_MODULE
-    )
+    ) as CustomerPreferencesService
 
     const [preferences] = await customerPreferencesModuleService.listPreferences({
         customer_id: customerId,
@@ -38,7 +39,7 @@ export const POST = async (
 
     const customerPreferencesModuleService = req.scope.resolve(
         CUSTOMER_PREFERENCES_MODULE
-    )
+    ) as CustomerPreferencesService
 
     const [existingPreference] = await customerPreferencesModuleService.listPreferences({
         customer_id: customerId,
