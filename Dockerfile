@@ -34,7 +34,7 @@ RUN yarn medusa build
 
 # Install production dependencies in the build directory
 WORKDIR /app/.medusa/server
-RUN yarn install --production --frozen-lockfile
+RUN yarn workspaces focus --production
 
 # =============================================================================
 # STAGE 3: Production
@@ -58,9 +58,6 @@ WORKDIR /app
 
 # Copy the entire built application from builder
 COPY --from=builder --chown=medusa:medusa /app/.medusa/server ./
-
-# Copy static assets if they exist (for admin dashboard)
-COPY --from=builder --chown=medusa:medusa /app/static ./static 2>/dev/null || true
 
 # Copy entrypoint script
 COPY --chown=medusa:medusa entrypoint.sh ./entrypoint.sh

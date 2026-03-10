@@ -1,6 +1,10 @@
 #!/bin/sh
 set -eu
 
+# Force production mode - must be set before loading Medusa CLI
+# This prevents ts-node from being loaded
+export NODE_ENV=production
+
 # Load Docker secrets as environment variables
 # In Docker Swarm, secrets are mounted at /run/secrets/
 if [ -d /run/secrets ]; then
@@ -13,5 +17,4 @@ if [ -d /run/secrets ]; then
 fi
 
 # Run Medusa start command
-# NODE_ENV is already set to production in Dockerfile
-exec node node_modules/@medusajs/medusa/dist/bin/medusa.js start
+exec node node_modules/@medusajs/cli/cli.js start
