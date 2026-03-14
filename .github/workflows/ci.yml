@@ -113,6 +113,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: Set IMAGE_TAG
+        run: echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
+
       - name: Docker Stack Deploy
         uses: cssnr/stack-deploy-action@v1
         with:

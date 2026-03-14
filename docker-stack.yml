@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   api:
-    image: uddeshyaus/jd-backend:latest
+    image: uddeshyaus/jd-backend:${IMAGE_TAG:-latest}
     ports:
       - "9000:9000"
     secrets:
