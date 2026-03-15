@@ -1,0 +1,13 @@
+diff --git a/node_modules/medusa-plugin-razorpay-v2/.medusa/server/src/providers/payment-razorpay/src/core/razorpay-base.js b/node_modules/medusa-plugin-razorpay-v2/.medusa/server/src/providers/payment-razorpay/src/core/razorpay-base.js
+index 3657949..62ffc0f 100644
+--- a/node_modules/medusa-plugin-razorpay-v2/.medusa/server/src/providers/payment-razorpay/src/core/razorpay-base.js
++++ b/node_modules/medusa-plugin-razorpay-v2/.medusa/server/src/providers/payment-razorpay/src/core/razorpay-base.js
+@@ -431,6 +431,7 @@ class RazorpayBase extends utils_1.AbstractPaymentProvider {
+             name: `${first_name} ${last_name}`,
+             email: email,
+             contact: phone ?? undefined,
+             gstin: billing_address?.metadata?.gstin,
++            fail_existing: 0,
+             notes: {
+                 medusa_account_holder_id: "NA"
+             }
