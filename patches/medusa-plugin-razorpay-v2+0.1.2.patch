@@ -11,3 +11,24 @@ index 3657949..62ffc0f 100644
              notes: {
                  medusa_account_holder_id: "NA"
              }
+@@ -244,10 +245,21 @@ class RazorpayBase extends utils_1.AbstractPaymentProvider {
+     async deletePayment(input) {
+         try {
+             // Check if we have valid data before attempting to cancel
+-            if (!input || !input.data) {
+-                this.logger.warn("Skipping payment deletion - no payment data provided");
++            if (!input || (!input.id && !input.data)) {
++                this.logger.warn("Skipping payment deletion - no payment input provided");
++                return {};
++            }
++            const hasSessionId = !!input.id || !!input.data?.payment_session_id;
++            const hasOrderReference = !!input.data?.id || !!input.data?.razorpayOrder?.id;
++            if (!hasSessionId && !hasOrderReference) {
++                this.logger.warn("Skipping payment deletion - missing payment session and Razorpay order identifiers", {
++                    data: input.data
++                });
+                 return {};
+             }
+             const deleted = await this.cancelPayment(input);
+             return deleted;
+         }
