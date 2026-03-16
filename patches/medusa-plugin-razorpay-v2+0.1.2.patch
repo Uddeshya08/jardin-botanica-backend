@@ -2,6 +2,26 @@ diff --git a/node_modules/medusa-plugin-razorpay-v2/.medusa/server/src/providers
 index 3657949..62ffc0f 100644
 --- a/node_modules/medusa-plugin-razorpay-v2/.medusa/server/src/providers/payment-razorpay/src/core/razorpay-base.js
 +++ b/node_modules/medusa-plugin-razorpay-v2/.medusa/server/src/providers/payment-razorpay/src/core/razorpay-base.js
+@@ -6,6 +6,20 @@ const utils_1 = require("@medusajs/framework/utils");
+ const razorpay_1 = __importDefault(require("razorpay"));
+ const get_smallest_unit_1 = require("../utils/get-smallest-unit");
+ const update_razorpay_customer_metadata_1 = require("../workflows/update-razorpay-customer-metadata");
++function getRazorpayErrorMessage(error) {
++    return (error?.message ||
++        error?.error?.description ||
++        error?.description ||
++        JSON.stringify(error));
++}
++function getPaymentLogContext(context) {
++    return {
++        payment_session_id: context?.idempotency_key,
++        customer_id: context?.customer?.id,
++        customer_email: context?.customer?.email,
++        account_holder_id: context?.account_holder?.id,
++        account_holder_external_id: context?.account_holder?.external_id ?? context?.account_holder?.data?.id,
++    };
++}
+ class RazorpayBase extends utils_1.AbstractPaymentProvider {
 @@ -431,6 +431,7 @@ class RazorpayBase extends utils_1.AbstractPaymentProvider {
              name: `${first_name} ${last_name}`,
              email: email,
@@ -32,3 +52,124 @@ index 3657949..62ffc0f 100644
              const deleted = await this.cancelPayment(input);
              return deleted;
          }
+@@ -223,17 +237,34 @@ class RazorpayBase extends utils_1.AbstractPaymentProvider {
+     async initiatePayment(input) {
+         const paymentSessionId = input.context?.idempotency_key;
+         const { amount, currency_code } = input;
+-        let toPay = (0, get_smallest_unit_1.getAmountFromSmallestUnit)(Math.round(parseInt(amount.toString())), currency_code.toUpperCase());
++        const parsedAmount = Math.round(parseInt(amount.toString(), 10));
++        let toPay = (0, get_smallest_unit_1.getAmountFromSmallestUnit)(parsedAmount, currency_code.toUpperCase());
+         toPay =
+             currency_code.toUpperCase() == "INR" ? toPay * 100 * 100 : toPay;
++        const normalizedAmount = Math.round(Number(toPay));
++        if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
++            throw new utils_1.MedusaError(utils_1.MedusaError.Types.INVALID_DATA, `Invalid Razorpay order amount: ${normalizedAmount} for ${currency_code}`);
++        }
++        const razorpayOrderCreateRequest = this.getRazorpayOrderCreateRequestBody(normalizedAmount, currency_code);
++        this.logger.info("Creating Razorpay order", {
++            ...getPaymentLogContext(input?.context),
++            original_amount: parsedAmount,
++            currency_code: currency_code.toUpperCase(),
++            razorpay_amount: normalizedAmount
++        });
+         try {
+-            const razorpayOrderCreateRequest = this.getRazorpayOrderCreateRequestBody(toPay, currency_code);
+             const razorpayOrder = await this.razorpay_.orders.create(razorpayOrderCreateRequest);
+             return {
+                 id: paymentSessionId,
+                 data: { razorpayOrder: razorpayOrder }
+             };
+         }
+         catch (error) {
+-            this.logger.error(`Error creating Razorpay order: ${error.message}`, error);
+-            throw new utils_1.MedusaError(utils_1.MedusaError.Types.INVALID_DATA, `Failed to create Razorpay order: ${error.message}`);
++            const errorMessage = getRazorpayErrorMessage(error);
++            this.logger.error(`Error creating Razorpay order: ${errorMessage}`, {
++                ...getPaymentLogContext(input?.context),
++                original_amount: parsedAmount,
++                currency_code: currency_code.toUpperCase(),
++                razorpay_amount: normalizedAmount,
++                request: razorpayOrderCreateRequest
++            });
++            throw new utils_1.MedusaError(utils_1.MedusaError.Types.INVALID_DATA, `Failed to create Razorpay order: ${errorMessage}`);
+         }
+     }
+@@ -472,17 +503,60 @@ class RazorpayBase extends utils_1.AbstractPaymentProvider {
+     async createAccountHolder(input) {
+-        const { first_name, last_name, email, phone, billing_address } = input
+-            .context.customer;
+-        const accountHolder = await this.razorpay_.customers.create({
+-            name: `${first_name} ${last_name}`,
+-            email: email,
+-            contact: phone ?? undefined,
+-            gstin: billing_address?.metadata?.gstin,
+-            fail_existing: 0,
+-            notes: {
+-                medusa_account_holder_id: "NA"
+-            }
+-        });
+-        return {
+-            data: accountHolder,
+-            id: accountHolder.id
+-        };
++        const customer = input?.context?.customer;
++        const linkedAccountHolder = input?.context?.account_holder;
++        const linkedExternalId = linkedAccountHolder?.external_id ?? linkedAccountHolder?.data?.id;
++        if (!customer?.email) {
++            throw new utils_1.MedusaError(utils_1.MedusaError.Types.INVALID_DATA, "Missing customer email while creating Razorpay account holder");
++        }
++        const { first_name, last_name, email, phone, billing_address } = customer;
++        this.logger.info("Resolving Razorpay account holder", getPaymentLogContext(input?.context));
++        if (linkedExternalId) {
++            try {
++                const existingLinkedCustomer = await this.razorpay_.customers.fetch(linkedExternalId);
++                if (existingLinkedCustomer?.id) {
++                    this.logger.info(`Using linked Razorpay customer ${existingLinkedCustomer.id} for ${email}`);
++                    return {
++                        data: existingLinkedCustomer,
++                        id: existingLinkedCustomer.id
++                    };
++                }
++            }
++            catch (error) {
++                this.logger.warn(`Failed to fetch linked Razorpay customer ${linkedExternalId}: ${getRazorpayErrorMessage(error)}`);
++            }
++        }
++        try {
++            const existingCustomers = await this.razorpay_.customers.all({
++                count: 100
++            });
++            const matchedCustomer = existingCustomers?.items?.find((existingCustomer) => existingCustomer.email === email || (phone && existingCustomer.contact === phone));
++            if (matchedCustomer) {
++                this.logger.info(`Found existing Razorpay customer for ${email}: ${matchedCustomer.id}`);
++                return {
++                    data: matchedCustomer,
++                    id: matchedCustomer.id
++                };
++            }
++        }
++        catch (error) {
++            this.logger.warn(`Error searching for existing Razorpay customer: ${getRazorpayErrorMessage(error)}`);
++        }
++        try {
++            const accountHolder = await this.razorpay_.customers.create({
++                name: `${first_name} ${last_name}`,
++                email: email,
++                contact: phone ?? undefined,
++                gstin: billing_address?.metadata?.gstin,
++                fail_existing: 0,
++                notes: {
++                    medusa_account_holder_id: "NA"
++                }
++            });
++            return {
++                data: accountHolder,
++                id: accountHolder.id
++            };
++        }
++        catch (error) {
++            const errorMessage = getRazorpayErrorMessage(error);
++            this.logger.error(`Failed to create Razorpay account holder: ${errorMessage}`, getPaymentLogContext(input?.context));
++            throw new utils_1.MedusaError(utils_1.MedusaError.Types.INVALID_DATA, `Failed to create or retrieve Razorpay account holder: ${errorMessage}`);
++        }
+     }
