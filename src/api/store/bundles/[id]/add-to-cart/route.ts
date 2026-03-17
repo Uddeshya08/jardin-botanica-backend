@@ -2,6 +2,7 @@ import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { PRODUCT_BUNDLE_MODULE } from "../../../../../modules/product-bundle";
 import ProductBundleService from "../../../../../modules/product-bundle/service";
 import { Modules } from "@medusajs/framework/utils";
+import type { IProductModuleService } from "@medusajs/framework/types";
 import { z } from "zod";
 
 const addToCartSchema = z.object({
@@ -10,6 +11,75 @@ const addToCartSchema = z.object({
   selections: z.record(z.array(z.string())).optional(),
   personalized_note: z.string().max(500).optional(),
 });
+
+type VariantDisplayDetails = {
+  variant_id: string;
+  product_title?: string;
+  variant_title?: string;
+  variant_display_title?: string;
+  quantity: number;
+};
+
+const getVariantDisplayTitle = (variant: {
+  title?: string | null;
+  product?: { title?: string | null } | null;
+  options?: Array<{ option?: { title?: string | null } | null; value?: string | null }>;
+}) => {
+  const optionText = (variant.options || [])
+    .map((optionValue) => {
+      const optionTitle = optionValue.option?.title?.trim();
+      const value = optionValue.value?.trim();
+
+      if (optionTitle && value) {
+        return `${optionTitle}: ${value}`;
+      }
+
+      return value || optionTitle || null;
+    })
+    .filter(Boolean)
+    .join(", ");
+
+  if (optionText) {
+    return optionText;
+  }
+
+  if (variant.title && variant.product?.title && variant.title !== variant.product.title) {
+    return variant.title;
+  }
+
+  return undefined;
+};
+
+const buildVariantLookup = async (
+  productModuleService: IProductModuleService,
+  variantIds: string[]
+) => {
+  const uniqueVariantIds = Array.from(new Set(variantIds.filter(Boolean)));
+
+  if (uniqueVariantIds.length === 0) {
+    return new Map<string, VariantDisplayDetails>();
+  }
+
+  const [variants] = await productModuleService.listAndCountProductVariants(
+    { id: uniqueVariantIds },
+    {
+      relations: ["product", "options", "options.option"],
+    }
+  );
+
+  return new Map(
+    variants.map((variant) => [
+      variant.id,
+      {
+        variant_id: variant.id,
+        product_title: variant.product?.title || undefined,
+        variant_title: variant.title || undefined,
+        variant_display_title: getVariantDisplayTitle(variant),
+        quantity: 1,
+      },
+    ])
+  );
+};
 
 export async function POST(
   req: MedusaRequest,
@@ -145,23 +215,67 @@ export async function POST(
     return;
   }
 
+  const productModuleService: IProductModuleService = req.scope.resolve(Modules.PRODUCT);
+  const choiceSlots = bundle.choice_slots || [];
+  const selectedChoiceItems = Object.entries(selections).flatMap(([slotId, optionIds]: [string, any]) => {
+    const slot = choiceSlots.find((choiceSlot: any) => choiceSlot.id === slotId || choiceSlot.slot_name === slotId);
+
+    return (slot?.options || [])
+      .filter((opt: any) => optionIds?.includes(opt.id))
+      .map((opt: any) => ({
+        slot_id: slot?.id,
+        slot_name: slot?.slot_name,
+        slot_description: slot?.slot_description,
+        option_id: opt.id,
+        variant_id: opt.medusa_variant_id,
+        quantity: opt.quantity,
+      }));
+  });
+
+  let variantDisplayLookup = new Map<string, VariantDisplayDetails>();
+
+  try {
+    variantDisplayLookup = await buildVariantLookup(
+      productModuleService,
+      [
+        ...(bundle.items?.map((bundleItem: any) => bundleItem.medusa_variant_id) || []),
+        ...selectedChoiceItems.map((choiceItem) => choiceItem.variant_id),
+      ]
+    );
+  } catch (error: any) {
+    console.error("[Bundle Add to Cart] Error building variant display metadata:", error.message);
+  }
+
   const bundleMetadata: Record<string, unknown> = {
     _bundle_id: bundleId,
     _bundle_title: bundle.title,
     _bundle_price: bundle.bundle_price,
     _bundle_selections: selections,
-    _bundle_items: bundle.items?.map((item: any) => ({
-      variant_id: item.medusa_variant_id,
-      quantity: item.quantity,
-    })) || [],
-    _bundle_choice_items: Object.entries(selections).flatMap(([slotId, optionIds]: [string, any]) => {
-      const slot = bundle.choice_slots?.find((s: any) => s.id === slotId);
-      return (slot?.options || [])
-        .filter((opt: any) => optionIds?.includes(opt.id))
-        .map((opt: any) => ({
-          variant_id: opt.medusa_variant_id,
-          quantity: opt.quantity,
-        }));
+    _bundle_items: bundle.items?.map((item: any) => {
+      const variantDetails = variantDisplayLookup.get(item.medusa_variant_id);
+
+      return {
+        variant_id: item.medusa_variant_id,
+        quantity: item.quantity,
+        product_title: variantDetails?.product_title,
+        variant_title: variantDetails?.variant_title,
+        variant_display_title: variantDetails?.variant_display_title,
+      };
+    }) || [],
+    _bundle_choice_items: selectedChoiceItems.map((choiceItem) => {
+      const variantDetails = variantDisplayLookup.get(choiceItem.variant_id);
+
+      return {
+        slot_id: choiceItem.slot_id,
+        slot_name: choiceItem.slot_name,
+        slot_description: choiceItem.slot_description,
+        option_id: choiceItem.option_id,
+        variant_id: choiceItem.variant_id,
+        quantity: choiceItem.quantity,
+        product_title: variantDetails?.product_title,
+        variant_title: variantDetails?.variant_title,
+        variant_display_title: variantDetails?.variant_display_title,
+      };
     }),
   };
 
