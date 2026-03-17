@@ -1,8 +1,5 @@
 import { MedusaError, Modules } from "@medusajs/framework/utils";
-import {
-  AuthenticatedMedusaRequest,
-  MedusaResponse,
-} from "@medusajs/framework/http";
+import { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import jwt from "jsonwebtoken";
 import { sendEmailUpdateVerification } from "../../../../../services/send-email-update-verification";
 
@@ -13,7 +10,7 @@ type EmailUpdateRequestBody = {
 
 export async function POST(
   req: AuthenticatedMedusaRequest<EmailUpdateRequestBody>,
-  res: MedusaResponse
+  res: MedusaResponse,
 ): Promise<void> {
   try {
     const { current_password, new_email } = req.body;
@@ -21,18 +18,17 @@ export async function POST(
     if (!current_password || !new_email) {
       throw new MedusaError(
         MedusaError.Types.INVALID_DATA,
-        "Current password and new email are required"
+        "Current password and new email are required",
       );
     }
 
     // 1. Get authenticated customer ID from auth context
     const customerId = req.auth_context?.actor_id;
 
+    console.log("Authenticated customer ID:", customerId);
+
     if (!customerId) {
-      throw new MedusaError(
-        MedusaError.Types.UNAUTHORIZED,
-        "Not authenticated"
-      );
+      throw new MedusaError(MedusaError.Types.UNAUTHORIZED, "Not authenticated");
     }
 
     // 2. Retrieve customer using Query (docs pattern)
@@ -50,18 +46,17 @@ export async function POST(
       },
       {
         throwIfKeyNotFound: true,
-      }
+      },
     );
+
+    console.log("Retrieved customer:", customer);
 
     if (!customer) {
       throw new MedusaError(MedusaError.Types.NOT_FOUND, "Customer not found");
     }
 
     if (!customer.email) {
-      throw new MedusaError(
-        MedusaError.Types.INVALID_DATA,
-        "Customer email not found"
-      );
+      throw new MedusaError(MedusaError.Types.INVALID_DATA, "Customer email not found");
     }
 
     // 3. Verify current password using Auth Module's authenticate (docs way)
@@ -76,10 +71,7 @@ export async function POST(
     });
 
     if (!success) {
-      throw new MedusaError(
-        MedusaError.Types.INVALID_DATA,
-        "Current password is incorrect"
-      );
+      throw new MedusaError(MedusaError.Types.INVALID_DATA, "Current password is incorrect");
     }
 
     // 4. Check if new email already exists (custom, but uses Query correctly)
@@ -91,14 +83,8 @@ export async function POST(
       },
     });
 
-    if (
-      existingCustomers.length > 0 &&
-      existingCustomers[0].id !== customerId
-    ) {
-      throw new MedusaError(
-        MedusaError.Types.DUPLICATE_ERROR,
-        "Email address is already in use"
-      );
+    if (existingCustomers.length > 0 && existingCustomers[0].id !== customerId) {
+      throw new MedusaError(MedusaError.Types.DUPLICATE_ERROR, "Email address is already in use");
     }
 
     // 5. Generate verification token (custom JWT logic)
@@ -109,7 +95,7 @@ export async function POST(
         type: "email_update",
       },
       process.env.JWT_SECRET || "supersecret",
-      { expiresIn: "24h" }
+      { expiresIn: "24h" },
     );
 
     // 6. Create verification URL (front‑end route that will later call updateProvider)
@@ -117,8 +103,7 @@ export async function POST(
 
     // 7. Prepare customer name
     const customerName =
-      `${customer.first_name || ""} ${customer.last_name || ""}`.trim() ||
-      "Customer";
+      `${customer.first_name || ""} ${customer.last_name || ""}`.trim() || "Customer";
 
     // 8. Send verification email (custom, outside docs)
     await sendEmailUpdateVerification({

@@ -1,8 +1,4 @@
-import {
-  loadEnv,
-  defineConfig,
-  ContainerRegistrationKeys,
-} from "@medusajs/framework/utils";
+import { loadEnv, defineConfig, ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import { Modules } from "@medusajs/framework/utils";
 loadEnv(process.env.NODE_ENV || "development", process.cwd());
 
@@ -91,6 +87,16 @@ module.exports = defineConfig({
             resolve: "@medusajs/medusa/auth-emailpass",
 
             id: "emailpass",
+          },
+          {
+            resolve: "./src/modules/phone-auth",
+            id: "phone-auth",
+            options: {
+              jwtSecret: process.env.JWT_SECRET || "supersecret",
+              msg91AuthKey: process.env.MSG91_AUTH_KEY,
+              msg91SenderId: process.env.MSG91_SENDER_ID,
+              msg91TemplateId: process.env.MSG91_TEMPLATE_ID,
+            },
           },
           {
             resolve: "@medusajs/medusa/auth-google",
