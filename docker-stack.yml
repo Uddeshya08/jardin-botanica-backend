@@ -1,10 +1,8 @@
-version: '3.8'
-
+version: "3.8"
 services:
   api:
     image: uddeshyaus/jd-backend:${IMAGE_TAG:-latest}
-    ports:
-      - "9000:9000"
+    network_mode: host
     secrets:
       - MEDUSA_ADMIN_ONBOARDING_TYPE
       - STORE_CORS
@@ -46,13 +44,19 @@ services:
       retries: 3
       start_period: 60s
     deploy:
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.jd-backend.rule=Host(`app.jardinbotanica.com`)"
+        - "traefik.http.routers.jd-backend.entrypoints=websecure"
+        - "traefik.http.routers.jd-backend.tls.certresolver=letsencrypt"
+        - "traefik.http.services.jd-backend.loadbalancer.server.port=9000"
       replicas: 1
       resources:
         limits:
-          cpus: '1.0'
+          cpus: "1.0"
           memory: 1G
         reservations:
-          cpus: '0.5'
+          cpus: "0.5"
           memory: 512M
       restart_policy:
         condition: on-failure
@@ -70,7 +74,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-
 secrets:
   MEDUSA_ADMIN_ONBOARDING_TYPE:
     external: true
