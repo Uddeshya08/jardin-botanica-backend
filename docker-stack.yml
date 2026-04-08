@@ -2,7 +2,8 @@ version: "3.8"
 services:
   api:
     image: uddeshyaus/jd-backend:${IMAGE_TAG:-latest}
-    network_mode: host
+    ports:
+      - 9000:9000
     secrets:
       - MEDUSA_ADMIN_ONBOARDING_TYPE
       - STORE_CORS
