@@ -4,6 +4,8 @@ services:
     image: uddeshyaus/jd-backend:${IMAGE_TAG:-latest}
     ports:
       - 9000:9000
+    networks:
+      - traefik-public
     secrets:
       - MEDUSA_ADMIN_ONBOARDING_TYPE
       - STORE_CORS
@@ -51,6 +53,7 @@ services:
         - "traefik.http.routers.jd-backend.entrypoints=websecure"
         - "traefik.http.routers.jd-backend.tls.certresolver=letsencrypt"
         - "traefik.http.services.jd-backend.loadbalancer.server.port=9000"
+        - "traefik.docker.network=traefik-public"
       replicas: 1
       resources:
         limits:
@@ -141,4 +144,8 @@ secrets:
   NODE_TLS_REJECT_UNAUTHORIZED:
     external: true
   WAREHOUSE_PINCODE:
+    external: true
+
+networks:
+  traefik-public:
     external: true
