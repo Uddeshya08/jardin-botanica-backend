@@ -54,6 +54,10 @@ services:
         - "traefik.http.routers.jd-backend.tls.certresolver=letsencrypt"
         - "traefik.http.services.jd-backend.loadbalancer.server.port=9000"
         - "traefik.docker.network=traefik-public"
+        # redirection middleware
+        - "traefik.http.middlewares.redirect-to-app.redirectregex.regex=^https://app.jardinbotanica.com/?$$"
+        - "traefik.http.middlewares.redirect-to-app.redirectregex.replacement=https://app.jardinbotanica.com/app"
+        - "traefik.http.routers.jd-backend.middlewares=redirect-to-app"
       replicas: 1
       resources:
         limits:
