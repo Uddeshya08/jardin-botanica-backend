@@ -9,6 +9,44 @@ loadEnv(process.env.NODE_ENV || "development", process.cwd());
 console.log("id => ", process.env.RAZORPAY_ID);
 console.log("secret ", process.env.RAZORPAY_SECRET);
 
+const r2FileStorageEnabled =
+  process.env.USE_R2_FILE_STORAGE === "true" ||
+  process.env.NODE_ENV === "production";
+
+const r2Endpoint =
+  process.env.R2_ENDPOINT ||
+  (process.env.R2_ACCOUNT_ID
+    ? `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`
+    : undefined);
+
+const r2FileModule = r2FileStorageEnabled
+  ? {
+      resolve: "@medusajs/medusa/file",
+      options: {
+        providers: [
+          {
+            resolve: "@medusajs/medusa/file-s3",
+            id: "s3",
+            options: {
+              file_url: process.env.R2_FILE_URL,
+              access_key_id: process.env.R2_ACCESS_KEY_ID,
+              secret_access_key: process.env.R2_SECRET_ACCESS_KEY,
+              region: "auto",
+              bucket: process.env.R2_BUCKET,
+              endpoint: r2Endpoint,
+              prefix: process.env.R2_PREFIX,
+              cache_control:
+                process.env.R2_CACHE_CONTROL || "public, max-age=31536000",
+              download_file_duration: process.env.R2_DOWNLOAD_FILE_DURATION
+                ? Number(process.env.R2_DOWNLOAD_FILE_DURATION)
+                : undefined,
+            },
+          },
+        ],
+      },
+    }
+  : undefined;
+
 module.exports = defineConfig({
   projectConfig: {
     databaseUrl: process.env.DATABASE_URL,
@@ -137,5 +175,6 @@ module.exports = defineConfig({
     {
       resolve: "./src/modules/customer-preferences",
     },
+    ...(r2FileModule ? [r2FileModule] : []),
   ],
 });

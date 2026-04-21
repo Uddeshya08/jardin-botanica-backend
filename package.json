@@ -17,6 +17,9 @@
     "node": "22.x"
   },
   "packageManager": "yarn@4.3.1",
+  "resolutions": {
+    "@aws-sdk/client-s3": "3.726.1"
+  },
   "scripts": {
     "build": "medusa db:migrate && medusa build",
     "start": "medusa db:migrate && medusa start",
