@@ -42,6 +42,27 @@ Visit the [Quickstart Guide](https://docs.medusajs.com/learn/installation) to se
 
 Visit the [Docs](https://docs.medusajs.com/learn/installation#get-started) to learn more about our system requirements.
 
+## Cloudflare R2 File Storage
+
+This backend can use Cloudflare R2 for Medusa file uploads through the S3 file provider.
+
+Set `USE_R2_FILE_STORAGE=true` to enable it. By default, local development continues to use Medusa's local file storage unless `NODE_ENV=production` or the flag is explicitly enabled.
+
+Required environment variables when R2 is enabled:
+
+- `R2_FILE_URL`
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+- `R2_BUCKET`
+- `R2_ACCOUNT_ID` or `R2_ENDPOINT`
+
+Optional environment variables:
+
+- `R2_REGION` defaults to `auto`
+- `R2_PREFIX`
+- `R2_CACHE_CONTROL`
+- `R2_DOWNLOAD_FILE_DURATION`
+
 ## What is Medusa
 
 Medusa is a set of commerce modules and tools that allow you to build rich, reliable, and performant commerce applications without reinventing core commerce logic. The modules can be customized and used to build advanced ecommerce stores, marketplaces, or any product that needs foundational commerce primitives. All modules are open-source and freely available on npm.
