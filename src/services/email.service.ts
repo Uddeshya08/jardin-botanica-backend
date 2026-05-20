@@ -226,8 +226,8 @@ export async function sendOrderConfirmationEmail(order: OrderData | any): Promis
     const customerEmail = order.email || null;
     
     // Test email for testing purposes
-    const testEmail = "abhishek1561998@gmail.com";
-    const fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
+    const testEmail = "onboarding@resend.dev";
+    const fromEmail = process.env.RESEND_FROM_EMAIL || 'hello@jardinbotanica.com';
     
     // Check if we're using test mode (onboarding@resend.dev)
     // In test mode, Resend only allows sending to your own email
