@@ -101,7 +101,7 @@ export async function sendEmailUpdateVerification(
   data: EmailUpdateData
 ): Promise<void> {
   try {
-    const fromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+    const fromEmail = process.env.RESEND_FROM_EMAIL || "hello@jardinbotanica.com";
     const isTestMode = fromEmail === "onboarding@resend.dev";
 
     // In test mode, only send to test email (Resend restriction)
