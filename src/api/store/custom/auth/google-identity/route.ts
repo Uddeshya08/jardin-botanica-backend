@@ -1,5 +1,5 @@
-import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
-import { IAuthModuleService } from "@medusajs/types";
+import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http";
+import type { IAuthModuleService, ProviderIdentityDTO } from "@medusajs/types";
 import { MedusaError, Modules } from "@medusajs/framework/utils";
 
 /**
@@ -9,7 +9,7 @@ import { MedusaError, Modules } from "@medusajs/framework/utils";
  * up right after callback, before the customer account exists, using the
  * bearer token's auth_identity_id (populated even when actor_id is empty).
  */
-export async function GET(req: MedusaRequest, res: MedusaResponse): Promise<void> {
+export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse): Promise<void> {
   const authIdentityId = req.auth_context?.auth_identity_id;
 
   if (!authIdentityId) {
@@ -23,7 +23,7 @@ export async function GET(req: MedusaRequest, res: MedusaResponse): Promise<void
   });
 
   const googleIdentity = authIdentity.provider_identities?.find(
-    (identity) => identity.provider === "google"
+    (identity: ProviderIdentityDTO) => identity.provider === "google"
   );
 
   res.json({
