@@ -377,44 +377,40 @@ export async function sendPasswordResetEmail(
   customerName: string = "Customer"
 ): Promise<void> {
   try {
-    const testEmail = "abhishek1561998@gmail.com";
-    const fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
-    const isTestMode = fromEmail === 'onboarding@resend.dev';
-    
+    const fromEmail = process.env.RESEND_FROM_EMAIL;
+    const resendApiKey = process.env.RESEND_API_KEY;
+
+    if (!fromEmail) {
+      throw new Error("RESEND_FROM_EMAIL is not set — cannot send password reset email");
+    }
+    if (!resendApiKey) {
+      throw new Error("RESEND_API_KEY is not set — cannot send password reset email");
+    }
+
     // Get frontend URL from environment variables
     // STORE_CORS may contain multiple URLs (comma-separated), so we take the first one
     let frontendUrl = process.env.FRONTEND_URL || process.env.STORE_CORS || 'http://localhost:8000';
-    
+
     // If frontendUrl contains multiple URLs (comma-separated), take the first one
     if (frontendUrl.includes(',')) {
       frontendUrl = frontendUrl.split(',')[0].trim();
     }
-    
+
     // Get default country code from environment or use 'in' as default
     const defaultCountryCode = process.env.DEFAULT_COUNTRY_CODE || 'in';
-    
+
     console.log('🌐 Using frontend URL for reset link:', frontendUrl);
     console.log('🌍 Using country code:', defaultCountryCode);
-    
+
     // Construct reset URL with token and email
     const resetUrl = `${frontendUrl}/${defaultCountryCode}/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
-    
-    // Get recipient emails based on mode
-    const recipientEmails = isTestMode ? [testEmail] : [email, testEmail];
-    
-    if (isTestMode) {
-      console.log('⚠️  Test mode detected - only sending to test email due to Resend restrictions');
-      console.log(`ℹ️  Customer email (${email}) will be skipped in test mode`);
-    }
-    
-    // Initialize Resend client
-    const resendApiKey = process.env.RESEND_API_KEY || 're_6vVfXKF3_49nTkiv9ehQQ2oxGkoHpw6ah';
-    
+
+    const recipientEmails = [email];
+
     console.log('📧 Preparing to send password reset email...');
     console.log('From:', fromEmail);
     console.log('To:', recipientEmails);
-    console.log('Mode:', isTestMode ? 'TEST MODE (Resend restrictions apply)' : 'PRODUCTION MODE');
-    
+
     const resend = new Resend(resendApiKey);
     
     // Generate email HTML

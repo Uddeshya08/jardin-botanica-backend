@@ -27,6 +27,8 @@ services:
       - DELHIVERY_WAREHOUSE_CODE
       - DELHIVERY_CLIENT_NAME
       - RESEND_API_KEY
+      - RESEND_FROM_EMAIL
+      - FRONTEND_URL
       - NEXT_PUBLIC_CONTENTFUL_SPACE_ID
       - NEXT_PUBLIC_CONTENTFUL_ACCESS_TOKEN
       - CONTENTFUL_ENV
@@ -127,6 +129,10 @@ secrets:
   DELHIVERY_CLIENT_NAME:
     external: true
   RESEND_API_KEY:
+    external: true
+  RESEND_FROM_EMAIL:
+    external: true
+  FRONTEND_URL:
     external: true
   NEXT_PUBLIC_CONTENTFUL_SPACE_ID:
     external: true
