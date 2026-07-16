@@ -17,5 +17,14 @@ export default defineMiddlewares({
         }),
       ],
     },
+    {
+      method: ["POST"],
+      matcher: "/store/custom/auth/google-resolve",
+      middlewares: [
+        authenticate("customer", ["session", "bearer"], {
+          allowUnregistered: true,
+        }),
+      ],
+    },
   ],
 });
