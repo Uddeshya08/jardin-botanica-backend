@@ -63,6 +63,55 @@ Optional environment variables:
 - `R2_CACHE_CONTROL`
 - `R2_DOWNLOAD_FILE_DURATION`
 
+## Customer Login with MSG91 Phone OTP
+
+Email remains the customer's unique account identifier. Phone OTP is an
+additional authentication method linked to the same Medusa customer ID.
+
+Required environment variables:
+
+- `MSG91_AUTH_KEY`
+- `MSG91_OTP_TEMPLATE_ID`
+
+Optional variables are documented in `.env.template`. Customer phone numbers
+should be stored in E.164 format, such as `+919876543210`. Existing Indian
+10-digit and `+91` formats are normalized automatically when OTP is requested.
+
+Storefront flow:
+
+1. Request an OTP. The response is intentionally generic so it does not reveal
+   whether a phone number has an account.
+
+   ```http
+   POST /store/custom/auth/phone-otp/request
+   Content-Type: application/json
+   x-publishable-api-key: {publishable_key}
+
+   { "phone": "+919876543210" }
+   ```
+
+2. Verify the OTP through Medusa's standard auth route. This returns the same
+   JWT shape as email/password login.
+
+   ```http
+   POST /auth/customer/phoneotp
+   Content-Type: application/json
+
+   { "phone": "+919876543210", "otp": "123456" }
+   ```
+
+   ```json
+   { "token": "..." }
+   ```
+
+3. Send the token as `Authorization: Bearer {token}` for authenticated Store API
+   requests, or exchange it through `POST /auth/session` when using cookie
+   sessions.
+
+The phone number must resolve to exactly one existing customer with an account
+and an email. Duplicate phone assignments are rejected rather than selecting an
+ambiguous customer.
+
 ## What is Medusa
 
 Medusa is a set of commerce modules and tools that allow you to build rich, reliable, and performant commerce applications without reinventing core commerce logic. The modules can be customized and used to build advanced ecommerce stores, marketplaces, or any product that needs foundational commerce primitives. All modules are open-source and freely available on npm.

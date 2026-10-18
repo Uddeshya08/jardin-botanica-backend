@@ -6,9 +6,6 @@ import {
 import { Modules } from "@medusajs/framework/utils";
 loadEnv(process.env.NODE_ENV || "development", process.cwd());
 
-console.log("id => ", process.env.RAZORPAY_ID);
-console.log("secret ", process.env.RAZORPAY_SECRET);
-
 const r2FileStorageEnabled =
   process.env.USE_R2_FILE_STORAGE === "true" ||
   process.env.NODE_ENV === "production";
@@ -56,6 +53,10 @@ module.exports = defineConfig({
       authCors: process.env.AUTH_CORS!,
       jwtSecret: process.env.JWT_SECRET || "supersecret",
       cookieSecret: process.env.COOKIE_SECRET || "supersecret",
+      authMethodsPerActor: {
+        customer: ["emailpass", "google", "phoneotp"],
+        user: ["emailpass"],
+      },
     },
   },
   admin: {
@@ -88,14 +89,14 @@ module.exports = defineConfig({
             resolve: "medusa-plugin-razorpay-v2/providers/payment-razorpay/src",
             id: "razorpay",
             options: {
-              key_id: "rzp_test_KZp3v4sgtPHTJI",
-              key_secret: "6iBecocanXPMuol08SHvt0zZ",
-              razorpay_account: "QmIYdoc2xbazYx",
+              key_id: process.env.RAZORPAY_ID,
+              key_secret: process.env.RAZORPAY_SECRET,
+              razorpay_account: process.env.RAZORPAY_ACCOUNT,
               automatic_expiry_period: 30 /* any value between 12minuts and 30 days expressed in minutes*/,
               manual_expiry_period: 20,
               refund_speed: "normal",
               auto_capture: true,
-              webhook_secret: "rzp_webhook_7xTgD3k9LqPz!2Vn",
+              webhook_secret: process.env.RAZORPAY_WEBHOOK_SECRET,
             },
           },
         ],
@@ -137,6 +138,21 @@ module.exports = defineConfig({
               clientId: process.env.GOOGLE_CLIENT_ID,
               clientSecret: process.env.GOOGLE_CLIENT_SECRET,
               callbackUrl: process.env.GOOGLE_CALLBACK_URL,
+            },
+          },
+          {
+            resolve: "./src/modules/phone-otp-auth",
+            id: "phoneotp",
+            options: {
+              authKey: process.env.MSG91_AUTH_KEY,
+              templateId: process.env.MSG91_OTP_TEMPLATE_ID,
+              baseUrl: process.env.MSG91_OTP_BASE_URL,
+              defaultCountryCode:
+                process.env.MSG91_DEFAULT_COUNTRY_CODE || "91",
+              otpExpiryMinutes: Number(
+                process.env.MSG91_OTP_EXPIRY_MINUTES || 5
+              ),
+              otpLength: Number(process.env.MSG91_OTP_LENGTH || 6),
             },
           },
         ],
