@@ -1,8 +1,8 @@
 diff --git a/node_modules/medusa-plugin-razorpay-v2/.medusa/server/src/providers/payment-razorpay/src/core/razorpay-base.js b/node_modules/medusa-plugin-razorpay-v2/.medusa/server/src/providers/payment-razorpay/src/core/razorpay-base.js
-index 3657949..62ffc0f 100644
+index b1830e9..08180fd 100644
 --- a/node_modules/medusa-plugin-razorpay-v2/.medusa/server/src/providers/payment-razorpay/src/core/razorpay-base.js
 +++ b/node_modules/medusa-plugin-razorpay-v2/.medusa/server/src/providers/payment-razorpay/src/core/razorpay-base.js
-@@ -6,6 +6,20 @@ const utils_1 = require("@medusajs/framework/utils");
+@@ -7,6 +7,21 @@ const utils_1 = require("@medusajs/framework/utils");
  const razorpay_1 = __importDefault(require("razorpay"));
  const get_smallest_unit_1 = require("../utils/get-smallest-unit");
  const update_razorpay_customer_metadata_1 = require("../workflows/update-razorpay-customer-metadata");
@@ -22,37 +22,9 @@ index 3657949..62ffc0f 100644
 +    };
 +}
  class RazorpayBase extends utils_1.AbstractPaymentProvider {
-@@ -431,6 +431,7 @@ class RazorpayBase extends utils_1.AbstractPaymentProvider {
-             name: `${first_name} ${last_name}`,
-             email: email,
-             contact: phone ?? undefined,
-             gstin: billing_address?.metadata?.gstin,
-+            fail_existing: 0,
-             notes: {
-                 medusa_account_holder_id: "NA"
-             }
-@@ -244,10 +245,21 @@ class RazorpayBase extends utils_1.AbstractPaymentProvider {
-     async deletePayment(input) {
-         try {
-             // Check if we have valid data before attempting to cancel
--            if (!input || !input.data) {
--                this.logger.warn("Skipping payment deletion - no payment data provided");
-+            if (!input || (!input.id && !input.data)) {
-+                this.logger.warn("Skipping payment deletion - no payment input provided");
-+                return {};
-+            }
-+            const hasSessionId = !!input.id || !!input.data?.payment_session_id;
-+            const hasOrderReference = !!input.data?.id || !!input.data?.razorpayOrder?.id;
-+            if (!hasSessionId && !hasOrderReference) {
-+                this.logger.warn("Skipping payment deletion - missing payment session and Razorpay order identifiers", {
-+                    data: input.data
-+                });
-                 return {};
-             }
-             const deleted = await this.cancelPayment(input);
-             return deleted;
-         }
-@@ -223,17 +237,34 @@ class RazorpayBase extends utils_1.AbstractPaymentProvider {
+     constructor(container, options) {
+         super(container, options);
+@@ -184,11 +199,22 @@ class RazorpayBase extends utils_1.AbstractPaymentProvider {
      async initiatePayment(input) {
          const paymentSessionId = input.context?.idempotency_key;
          const { amount, currency_code } = input;
@@ -77,7 +49,7 @@ index 3657949..62ffc0f 100644
              const razorpayOrder = await this.razorpay_.orders.create(razorpayOrderCreateRequest);
              return {
                  id: paymentSessionId,
-                 data: { razorpayOrder: razorpayOrder }
+@@ -196,8 +222,15 @@ class RazorpayBase extends utils_1.AbstractPaymentProvider {
              };
          }
          catch (error) {
@@ -94,7 +66,29 @@ index 3657949..62ffc0f 100644
 +            throw new utils_1.MedusaError(utils_1.MedusaError.Types.INVALID_DATA, `Failed to create Razorpay order: ${errorMessage}`);
          }
      }
-@@ -472,17 +503,60 @@ class RazorpayBase extends utils_1.AbstractPaymentProvider {
+     async updateRazorpayOrderMetadata(orderId, metadata) {
+@@ -246,6 +279,18 @@ class RazorpayBase extends utils_1.AbstractPaymentProvider {
+     }
+     async deletePayment(input) {
+         try {
++            if (!input || (!input.id && !input.data)) {
++                this.logger.warn("Skipping payment deletion - no payment input provided");
++                return {};
++            }
++            const hasSessionId = !!input.id || !!input.data?.payment_session_id;
++            const hasOrderReference = !!input.data?.id || !!input.data?.razorpayOrder?.id;
++            if (!hasSessionId && !hasOrderReference) {
++                this.logger.warn("Skipping payment deletion - missing payment session and Razorpay order identifiers", {
++                    data: input.data
++                });
++                return {};
++            }
+             return await this.cancelPayment(input);
+         }
+         catch (e) {
+@@ -426,21 +471,66 @@ class RazorpayBase extends utils_1.AbstractPaymentProvider {
+         }
+     }
      async createAccountHolder(input) {
 -        const { first_name, last_name, email, phone, billing_address } = input
 -            .context.customer;
@@ -103,15 +97,8 @@ index 3657949..62ffc0f 100644
 -            email: email,
 -            contact: phone ?? undefined,
 -            gstin: billing_address?.metadata?.gstin,
--            fail_existing: 0,
 -            notes: {
 -                medusa_account_holder_id: "NA"
--            }
--        });
--        return {
--            data: accountHolder,
--            id: accountHolder.id
--        };
 +        const customer = input?.context?.customer;
 +        const linkedAccountHolder = input?.context?.account_holder;
 +        const linkedExternalId = linkedAccountHolder?.external_id ?? linkedAccountHolder?.data?.id;
@@ -130,7 +117,12 @@ index 3657949..62ffc0f 100644
 +                        id: existingLinkedCustomer.id
 +                    };
 +                }
-+            }
+             }
+-        });
+-        return {
+-            data: accountHolder,
+-            id: accountHolder.id
+-        };
 +            catch (error) {
 +                this.logger.warn(`Failed to fetch linked Razorpay customer ${linkedExternalId}: ${getRazorpayErrorMessage(error)}`);
 +            }
@@ -173,3 +165,5 @@ index 3657949..62ffc0f 100644
 +            throw new utils_1.MedusaError(utils_1.MedusaError.Types.INVALID_DATA, `Failed to create or retrieve Razorpay account holder: ${errorMessage}`);
 +        }
      }
+     async updateAccountHolder(input) {
+         const { id, name, email, phone: contact } = input.data;
