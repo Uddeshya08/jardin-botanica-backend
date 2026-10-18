@@ -34,6 +34,7 @@ RUN yarn medusa build
 
 # Install production dependencies in the build directory
 WORKDIR /app/.medusa/server
+RUN cp -R /app/patches ./patches
 RUN yarn workspaces focus --production
 
 # =============================================================================
