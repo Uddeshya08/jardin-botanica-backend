@@ -41,10 +41,8 @@ export async function POST(
       return;
     }
 
-    // Get Razorpay credentials from environment or config
-    const keyId = process.env.RAZORPAY_KEY_ID || "rzp_test_KZp3v4sgtPHTJI";
-    const keySecret =
-      process.env.RAZORPAY_KEY_SECRET || "6iBecocanXPMuol08SHvt0zZ";
+    const keyId = process.env.RAZORPAY_ID;
+    const keySecret = process.env.RAZORPAY_SECRET;
 
     if (!keyId || !keySecret) {
       res.status(500).json({

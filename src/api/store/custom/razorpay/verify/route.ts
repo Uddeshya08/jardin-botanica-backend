@@ -31,9 +31,7 @@ export async function POST(
       return;
     }
 
-    // Get Razorpay key secret
-    const keySecret =
-      process.env.RAZORPAY_KEY_SECRET || "6iBecocanXPMuol08SHvt0zZ";
+    const keySecret = process.env.RAZORPAY_SECRET;
 
     if (!keySecret) {
       res.status(500).json({

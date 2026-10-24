@@ -114,7 +114,8 @@ module.exports = defineConfig({
             resolve: "./src/modules/delhivery-fulfillment",
             id: "delhivery",
             options: {
-              pickupLocationName: "Jardin Botanica",
+              pickupLocationName:
+                process.env.DELHIVERY_WAREHOUSE_CODE?.trim() || "Jardin Botanica",
             },
           },
         ],

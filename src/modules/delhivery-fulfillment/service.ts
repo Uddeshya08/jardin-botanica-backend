@@ -13,6 +13,7 @@ import {
 } from "@medusajs/framework/types";
 
 import { DelhiveryApiClient } from "./api-client";
+import { COD_HANDLING_FEE } from "./constants";
 
 type InjectedDependencies = {
   logger: Logger;
@@ -101,6 +102,7 @@ class DelhiveryFulfillmentProviderService extends AbstractFulfillmentProviderSer
 
       return {
         ...data,
+        cod_fee: data.paymentMethod === "COD" ? COD_HANDLING_FEE : 0,
         shipping_mode: optionData.shipping_mode,
         pincode: shipping_address.postal_code,
         serviceable: true,
@@ -119,6 +121,7 @@ class DelhiveryFulfillmentProviderService extends AbstractFulfillmentProviderSer
 
     return {
       ...data,
+      cod_fee: data.paymentMethod === "COD" ? COD_HANDLING_FEE : 0,
       shipping_mode: optionData.shipping_mode,
       pincode: shipping_address.postal_code,
       serviceable: true,
@@ -185,7 +188,8 @@ class DelhiveryFulfillmentProviderService extends AbstractFulfillmentProviderSer
       weightInGrams: totalWeightGrams,
       mode: delhiveryMode,
       status: "Delivered",
-      paymentType: paymentMethod === "PREPAID" ? "Pre-paid" : "COD",
+      // Keep delivery pricing separate from the fixed customer COD handling fee.
+      paymentType: "Pre-paid",
     });
 
     // Extract pricing details from Delhivery response
@@ -205,7 +209,7 @@ class DelhiveryFulfillmentProviderService extends AbstractFulfillmentProviderSer
     const netAmount = pricingData.total_amount;
 
     return {
-      calculated_amount: netAmount,
+      calculated_amount: Number(netAmount) + (paymentMethod === "COD" ? COD_HANDLING_FEE : 0),
       is_calculated_price_tax_inclusive: false,
     };
   }
