@@ -16,6 +16,21 @@ interface CheckoutRequest {
   notes?: Record<string, any>;
 }
 
+export async function GET(
+  _req: MedusaRequest,
+  res: MedusaResponse
+): Promise<void> {
+  const keyId = process.env.RAZORPAY_ID;
+
+  if (!keyId || !process.env.RAZORPAY_SECRET) {
+    res.status(503).json({ error: "Razorpay is not configured" });
+    return;
+  }
+
+  res.setHeader("Cache-Control", "no-store");
+  res.json({ key_id: keyId });
+}
+
 export async function POST(
   req: MedusaRequest,
   res: MedusaResponse
