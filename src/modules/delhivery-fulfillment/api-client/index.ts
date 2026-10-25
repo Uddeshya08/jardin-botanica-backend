@@ -145,7 +145,7 @@ export class DelhiveryApiClient {
    */
   async trackShipment(waybill: string): Promise<any> {
     try {
-      const response = await this.apiClient.get("/api/packages/json/", {
+      const response = await this.apiClient.get("/api/v1/packages/json/", {
         params: { waybill: waybill },
       });
 
