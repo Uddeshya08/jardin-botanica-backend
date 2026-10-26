@@ -150,7 +150,13 @@ class DelhiveryFulfillmentProviderService extends AbstractFulfillmentProviderSer
       };
     }
 
-    console.log("Shipping Address", JSON.stringify(shipping_address, null, 2));
+    // Removing the last item refreshes shipping prices before Medusa clears the method.
+    if (!items?.length) {
+      return {
+        calculated_amount: 0,
+        is_calculated_price_tax_inclusive: false,
+      };
+    }
 
     if (!shipping_address?.postal_code) {
       throw new Error("Delivery pincode missing");
@@ -164,10 +170,6 @@ class DelhiveryFulfillmentProviderService extends AbstractFulfillmentProviderSer
     const origin = from_location.address.postal_code;
 
     // Calculate weight in grams from items
-    if (!items?.length) {
-      throw new Error("Items are required to calculate weight");
-    }
-
     const totalWeightGrams = items.reduce((sum, item) => {
       const w = (item as any).variant?.weight || 0;
       return sum + w * Number(item.quantity);

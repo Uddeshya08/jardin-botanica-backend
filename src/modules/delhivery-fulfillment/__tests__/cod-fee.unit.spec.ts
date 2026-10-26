@@ -18,6 +18,7 @@ describe("fixed COD handling fee", () => {
   };
 
   beforeEach(() => {
+    client.calculateShippingCost.mockClear();
     service.client_ = client;
     client.calculateShippingCost.mockResolvedValue([{ total_amount: 39.07 }]);
     client.checkServiceability.mockResolvedValue({
@@ -42,5 +43,19 @@ describe("fixed COD handling fee", () => {
       { shipping_mode: "Surface" }, { paymentMethod, cod_fee: 999 }, context,
     );
     expect(data.cod_fee).toBe(paymentMethod === "COD" ? 100 : 0);
+  });
+
+  it("allows the last cart item to be removed without requesting a shipping price", async () => {
+    const price = await service.calculatePrice(
+      { shipping_mode: "Surface" },
+      { paymentMethod: "PREPAID" },
+      { ...context, items: [] },
+    );
+
+    expect(price).toEqual({
+      calculated_amount: 0,
+      is_calculated_price_tax_inclusive: false,
+    });
+    expect(client.calculateShippingCost).not.toHaveBeenCalled();
   });
 });
