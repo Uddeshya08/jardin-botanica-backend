@@ -4,9 +4,19 @@ set -euo pipefail
 set +x
 
 service="jd-backend_api"
-health_url="https://app.jardinbotanica.com/health"
-names=(RAZORPAY_ID RAZORPAY_SECRET RAZORPAY_ACCOUNT RAZORPAY_WEBHOOK_SECRET)
+check_url="https://app.jardinbotanica.com/store/regions"
+names=(RAZORPAY_ID RAZORPAY_SECRET)
 suffix="$(date -u +%Y%m%d%H%M%S)-$$"
+
+if [[ "${1:-}" == "--keys-only" && "$#" -eq 1 ]]; then
+  keys_only=true
+elif [[ "$#" -eq 0 ]]; then
+  keys_only=false
+  names+=(RAZORPAY_ACCOUNT RAZORPAY_WEBHOOK_SECRET)
+else
+  echo "Usage: bash rotate-razorpay-secrets.sh [--keys-only]" >&2
+  exit 1
+fi
 
 if [[ ! -t 0 ]]; then
   echo "Run from an interactive terminal (use ssh -t if connecting remotely)." >&2
@@ -27,21 +37,37 @@ for name in "${names[@]}"; do
   fi
 done
 
-echo "This rotates four Razorpay secrets and restarts $service twice."
+echo "This rotates ${#names[@]} Razorpay secrets and restarts $service twice."
 echo "Have a secure backup of the existing values before continuing."
-echo "The webhook secret must match the live webhook configured in Razorpay."
+if [[ "$keys_only" == false ]]; then
+  echo "The webhook secret must match the live webhook configured in Razorpay."
+fi
 read -r -s -p "Live Razorpay Key ID (rzp_live_...): " key_id
 printf '\n'
 read -r -s -p "Live Razorpay Key Secret: " key_secret
 printf '\n'
-read -r -s -p "Razorpay Merchant/Account ID: " account_id
-printf '\n'
-read -r -s -p "Live Razorpay Webhook Secret: " webhook_secret
-printf '\n'
+if [[ "$keys_only" == false ]]; then
+  read -r -s -p "Razorpay Merchant/Account ID: " account_id
+  printf '\n'
+  read -r -s -p "Live Razorpay Webhook Secret: " webhook_secret
+  printf '\n'
+fi
 trap 'unset key_id key_secret account_id webhook_secret' EXIT
 
-if [[ "$key_id" != rzp_live_* || -z "$key_secret" || -z "$account_id" || -z "$webhook_secret" ]]; then
-  echo "A live Key ID and all three other values are required. Nothing was changed." >&2
+if [[ "$key_id" != rzp_live_* ]]; then
+  echo "Invalid Key ID: enter the Live Mode Key ID beginning with rzp_live_. Nothing was changed." >&2
+  exit 1
+fi
+if [[ -z "$key_secret" ]]; then
+  echo "Key Secret was empty. Nothing was changed." >&2
+  exit 1
+fi
+if [[ "$keys_only" == false && -z "$account_id" ]]; then
+  echo "Merchant/Account ID was empty. Nothing was changed." >&2
+  exit 1
+fi
+if [[ "$keys_only" == false && -z "$webhook_secret" ]]; then
+  echo "Webhook Secret was empty. Nothing was changed." >&2
   exit 1
 fi
 
@@ -51,7 +77,10 @@ if [[ "$confirmation" != "ROTATE" ]]; then
   exit 0
 fi
 
-values=("$key_id" "$key_secret" "$account_id" "$webhook_secret")
+values=("$key_id" "$key_secret")
+if [[ "$keys_only" == false ]]; then
+  values+=("$account_id" "$webhook_secret")
+fi
 new_names=()
 for i in "${!names[@]}"; do
   new_name="${names[$i]}_rot_${suffix}"
@@ -61,9 +90,11 @@ done
 unset key_id key_secret account_id webhook_secret
 
 check_health() {
-  local attempt
+  local attempt status
   for attempt in {1..12}; do
-    if curl --silent --show-error --fail --max-time 5 "$health_url" >/dev/null; then
+    # The store endpoint returns 400 without a publishable key, confirming the API is serving.
+    status="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 5 "$check_url" || true)"
+    if [[ "$status" == "200" || "$status" == "400" ]]; then
       return 0
     fi
     sleep 5
