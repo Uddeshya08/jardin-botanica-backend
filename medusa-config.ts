@@ -6,6 +6,14 @@ import {
 import { Modules } from "@medusajs/framework/utils";
 loadEnv(process.env.NODE_ENV || "development", process.cwd());
 
+// Always allow the production storefront, including its www hostname.
+const withStorefrontOrigins = (origins?: string): string =>
+  [...new Set([
+    ...(origins || "").split(",").map((origin) => origin.trim()).filter(Boolean),
+    "https://www.jardinbotanica.com",
+    "https://jardinbotanica.com",
+  ])].join(",");
+
 const r2FileStorageEnabled =
   process.env.USE_R2_FILE_STORAGE === "true" ||
   process.env.NODE_ENV === "production";
@@ -48,9 +56,13 @@ module.exports = defineConfig({
   projectConfig: {
     databaseUrl: process.env.DATABASE_URL,
     http: {
-      storeCors: process.env.STORE_CORS!,
+      storeCors: withStorefrontOrigins(process.env.STORE_CORS),
       adminCors: process.env.ADMIN_CORS!,
-      authCors: process.env.AUTH_CORS!,
+      authCors: withStorefrontOrigins([
+        process.env.AUTH_CORS,
+        process.env.STORE_CORS,
+        process.env.ADMIN_CORS,
+      ].filter(Boolean).join(",")),
       jwtSecret: process.env.JWT_SECRET || "supersecret",
       cookieSecret: process.env.COOKIE_SECRET || "supersecret",
       authMethodsPerActor: {
@@ -114,7 +126,8 @@ module.exports = defineConfig({
             resolve: "./src/modules/delhivery-fulfillment",
             id: "delhivery",
             options: {
-              pickupLocationName: "Jardin Botanica",
+              pickupLocationName:
+                process.env.DELHIVERY_WAREHOUSE_CODE?.trim() || "Jardin Botanica",
             },
           },
         ],

@@ -10,11 +10,9 @@ import { MedusaError, Modules } from "@medusajs/framework/utils";
  * Resolves the Google sign-in for the storefront callback. The callback JWT is
  * a registration token (empty actor_id) and Google's email lives on the
  * provider identity record. This route:
- *   1. reads the verified Google email off the auth identity,
- *   2. if a customer with that email already exists, links this auth identity
- *      to it (sets app_metadata.customer_id) so a token refresh yields actor_id,
- *   3. reports whether the customer already existed so the storefront knows
- *      whether it still needs to create one.
+ *   1. reads the Google email and name off the auth identity,
+ *   2. links an existing customer when needed and fills only blank name fields,
+ *   3. returns the name for a new customer so the storefront can create its profile.
  */
 export async function POST(
   req: AuthenticatedMedusaRequest,
@@ -40,6 +38,13 @@ export async function POST(
   );
 
   const email = googleIdentity?.user_metadata?.email as string | undefined;
+  const givenName = googleIdentity?.user_metadata?.given_name;
+  const familyName = googleIdentity?.user_metadata?.family_name;
+  const fullName = googleIdentity?.user_metadata?.name;
+  const lastName = typeof familyName === "string" ? familyName.trim() : "";
+  const firstName =
+    (typeof givenName === "string" && givenName.trim()) ||
+    (!lastName && typeof fullName === "string" ? fullName.trim() : "");
 
   if (!email) {
     throw new MedusaError(
@@ -48,8 +53,12 @@ export async function POST(
     );
   }
 
-  const existingCustomers = await customerModuleService.listCustomers({ email });
-  const account = existingCustomers?.find((customer) => customer.has_account);
+  const linkedCustomerId = authIdentity.app_metadata?.customer_id;
+  const account = linkedCustomerId
+    ? await customerModuleService.retrieveCustomer(String(linkedCustomerId))
+    : (await customerModuleService.listCustomers({ email })).find(
+        (customer) => customer.has_account
+      );
 
   if (account) {
     const appMetadata = authIdentity.app_metadata || {};
@@ -62,9 +71,25 @@ export async function POST(
       });
     }
 
+    const missingName: { first_name?: string; last_name?: string } = {};
+    if (!account.first_name?.trim() && firstName) {
+      missingName.first_name = firstName;
+    }
+    if (!account.last_name?.trim() && lastName) {
+      missingName.last_name = lastName;
+    }
+    if (Object.keys(missingName).length) {
+      await customerModuleService.updateCustomers(account.id, missingName);
+    }
+
     res.json({ email, existed: true });
     return;
   }
 
-  res.json({ email, existed: false });
+  res.json({
+    email,
+    existed: false,
+    first_name: firstName || null,
+    last_name: lastName || null,
+  });
 }

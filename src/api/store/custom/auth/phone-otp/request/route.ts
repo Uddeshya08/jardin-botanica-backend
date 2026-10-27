@@ -48,7 +48,8 @@ function getMsg91Client(): Msg91OtpClient {
 async function getCustomerByPhone(
   req: MedusaRequest,
   normalizedPhone: string,
-  countryCode: string
+  countryCode: string,
+  log: (stage: string, details?: Record<string, unknown>) => void
 ): Promise<CustomerLookup | null> {
   const query = req.scope.resolve(ContainerRegistrationKeys.QUERY)
   const variants = getPhoneLookupVariants(normalizedPhone, countryCode)
@@ -65,6 +66,17 @@ async function getCustomerByPhone(
   const uniqueCustomers = [
     ...new Map(customers.map((customer) => [customer.id, customer])).values(),
   ]
+
+  log("customer_lookup_completed", {
+    matched_customers: data.length,
+    eligible_customers: uniqueCustomers.length,
+    without_account: (data as CustomerLookup[]).filter(
+      (customer) => !customer.has_account
+    ).length,
+    without_email: (data as CustomerLookup[]).filter(
+      (customer) => !customer.email
+    ).length,
+  })
 
   if (uniqueCustomers.length > 1) {
     throw new MedusaError(
@@ -141,6 +153,18 @@ export async function POST(
   req: MedusaRequest<RequestOtpBody>,
   res: MedusaResponse
 ): Promise<void> {
+  const logger = req.scope.resolve(ContainerRegistrationKeys.LOGGER)
+  const requestId = (req as MedusaRequest & { requestId?: string }).requestId || "-"
+  const log = (stage: string, details: Record<string, unknown> = {}): void => {
+    logger.info(JSON.stringify({
+      event: "phone_otp_request",
+      request_id: requestId,
+      stage,
+      ...details,
+    }))
+  }
+
+  log("received")
   const { phone: phoneInput } = requestOtpSchema.parse(req.body)
   const countryCode = process.env.MSG91_DEFAULT_COUNTRY_CODE || "91"
 
@@ -162,6 +186,7 @@ export async function POST(
   const recentlyRequested = await cache.get<boolean>(rateLimitKey)
 
   if (recentlyRequested) {
+    log("rate_limited")
     res.status(429).json({
       message: "Please wait before requesting another OTP.",
       retry_after_seconds: 60,
@@ -171,15 +196,19 @@ export async function POST(
 
   await cache.set(rateLimitKey, true, 60)
 
-  const customer = await getCustomerByPhone(req, phone, countryCode)
+  log("customer_lookup_started")
+  const customer = await getCustomerByPhone(req, phone, countryCode, log)
 
   if (!customer) {
+    log("skipped_no_eligible_customer")
     res.status(202).json({ message: RESPONSE_MESSAGE })
     return
   }
 
   const authModuleService: IAuthModuleService = req.scope.resolve(Modules.AUTH)
+  log("identity_link_started")
   await linkPhoneIdentity(authModuleService, phone, customer.id)
+  log("identity_link_completed")
 
   if (customer.phone !== `+${phone}`) {
     const customerModuleService: ICustomerModuleService = req.scope.resolve(
@@ -191,15 +220,19 @@ export async function POST(
   }
 
   try {
-    await getMsg91Client().sendOtp(phone)
+    log("msg91_send_started")
+    const result = await getMsg91Client().sendOtp(phone)
+    log("msg91_accepted", {
+      provider_request_id: result.requestId || null,
+    })
   } catch (error) {
+    log("msg91_send_failed", {
+      error_type: error instanceof Error ? error.name : "UnknownError",
+    })
     await cache.invalidate(rateLimitKey)
 
-    const logger = req.scope.resolve(ContainerRegistrationKeys.LOGGER)
     logger.error(
-      `Unable to send MSG91 OTP: ${
-        error instanceof Error ? error.message : "Unknown error"
-      }`
+      `Unable to send MSG91 OTP (request_id=${requestId})`
     )
 
     throw new MedusaError(
