@@ -201,7 +201,9 @@ export async function POST(
 
   if (!customer) {
     log("skipped_no_eligible_customer")
-    res.status(202).json({ message: RESPONSE_MESSAGE })
+    res.status(400).json({
+      message: "This number isn't linked to an account yet. Please sign up first to continue with OTP.",
+    })
     return
   }
 
