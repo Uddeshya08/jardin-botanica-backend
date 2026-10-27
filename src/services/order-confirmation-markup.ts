@@ -69,6 +69,7 @@ export const ORDER_CONFIRMATION_MARKUP = `<!DOCTYPE html>
       <div class="softline" style="border-bottom:1px solid #b5b1a6;"></div>
       <table role="presentation" width="100%" class="mono small" style="border-collapse:collapse; border-spacing:0;font-family:&quot;American Typewriter&quot;, &quot;Courier New&quot;, Courier, monospace;font-size:12px; line-height:1.7; letter-spacing:.055em;;margin-top:13px;">
         <tr><td class="muted" style="vertical-align:top;color:#77766f;;padding:5px 0;">Shipping</td><td align="right" style="vertical-align:top;;padding:5px 0;">{{shipping}}</td></tr>
+        {{cod_row}}
         {{discount_row}}
         <tr><td style="vertical-align:top;;padding:11px 0 4px;font-size:13px;">Total (incl. GST)</td><td align="right" style="vertical-align:top;;padding:11px 0 4px;font-size:13px;">{{total}}</td></tr>
       </table>

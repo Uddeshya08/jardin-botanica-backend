@@ -1,6 +1,9 @@
 import type { SubscriberConfig, SubscriberArgs } from "@medusajs/framework";
 import { createOrderFulfillmentWorkflow } from "@medusajs/medusa/core-flows";
 import { sendOrderConfirmationEmail } from "../services/email.service";
+import { formatOrderReference, ORDER_REFERENCE_METADATA_KEY } from "../utils/order-reference";
+import { Modules } from "@medusajs/framework/utils";
+import type { IOrderModuleService } from "@medusajs/types";
 
 export default async function handleOrderPlaced({
   event: { data },
@@ -38,6 +41,19 @@ export default async function handleOrderPlaced({
 
     if (!order.items || order.items.length === 0) {
       throw new Error(`Order ${orderId} has no items`);
+    }
+
+    const reference = formatOrderReference(order.display_id);
+    if (order.metadata?.[ORDER_REFERENCE_METADATA_KEY] !== reference) {
+      try {
+        const orderService: IOrderModuleService = container.resolve(Modules.ORDER);
+        await orderService.updateOrders(orderId, {
+          metadata: { ...(order.metadata || {}), [ORDER_REFERENCE_METADATA_KEY]: reference },
+        });
+        order.metadata = { ...(order.metadata || {}), [ORDER_REFERENCE_METADATA_KEY]: reference };
+      } catch (referenceError) {
+        console.error("Failed to persist order reference:", { orderId, referenceError });
+      }
     }
 
     // Build items to fulfill

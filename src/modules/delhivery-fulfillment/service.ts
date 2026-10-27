@@ -13,7 +13,8 @@ import {
 } from "@medusajs/framework/types";
 
 import { DelhiveryApiClient } from "./api-client";
-import { COD_HANDLING_FEE } from "./constants";
+import { COD_HANDLING_FEE, isFreeShippingEnabled } from "./constants";
+import { formatOrderReference } from "../../utils/order-reference";
 
 type InjectedDependencies = {
   logger: Logger;
@@ -211,7 +212,8 @@ class DelhiveryFulfillmentProviderService extends AbstractFulfillmentProviderSer
     const netAmount = pricingData.total_amount;
 
     return {
-      calculated_amount: Number(netAmount) + (paymentMethod === "COD" ? COD_HANDLING_FEE : 0),
+      calculated_amount: (isFreeShippingEnabled() ? 0 : Number(netAmount)) +
+        (paymentMethod === "COD" ? COD_HANDLING_FEE : 0),
       is_calculated_price_tax_inclusive: false,
     };
   }
@@ -284,7 +286,7 @@ class DelhiveryFulfillmentProviderService extends AbstractFulfillmentProviderSer
 
     const shipment = {
       name: `${delivery.first_name} ${delivery.last_name}`.trim(),
-      order: (order?.display_id || order?.id || "").toString(),
+      order: order?.display_id ? formatOrderReference(order.display_id) : (order?.id || "").toString(),
       phone: delivery.phone,
       add: `${delivery.address_1} ${delivery.address_2 || ""}`.trim(),
       pin: parseInt(delivery.postal_code),

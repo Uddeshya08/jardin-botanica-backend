@@ -1,17 +1,19 @@
 import { DELIVERY_MARKUP, ORDER_CONFIRMATION_MARKUP, ORDER_ITEM_MARKUP } from "./order-confirmation-markup"
+import { getOrderReference } from "../utils/order-reference"
 
 type Amount = number | string | { amount?: number | string; value?: number | string }
 
 export interface ConfirmationOrder {
   id: string
   display_id?: string | number
+  metadata?: Record<string, unknown> | null
   email?: string | null
   created_at: string | Date
   currency_code?: string
   total?: Amount | null
   shipping_total?: Amount | null
   discount_total?: Amount | null
-  shipping_methods?: { amount?: Amount | null }[]
+  shipping_methods?: { amount?: Amount | null; data?: Record<string, unknown> | null }[]
   customer?: { first_name?: string | null; last_name?: string | null } | null
   items?: {
     product_title?: string | null
@@ -63,9 +65,12 @@ export function renderOrderConfirmationEmail(order: ConfirmationOrder): string {
   const money = (value: number): string => escapeHtml(new Intl.NumberFormat("en-IN", {
     style: "currency", currency, minimumFractionDigits: 2, maximumFractionDigits: 2,
   }).format(value))
-  const shipping = order.shipping_total != null
+  const shippingWithFees = order.shipping_total != null
     ? amount(order.shipping_total)
     : (order.shipping_methods ?? []).reduce((total, method) => total + amount(method.amount), 0)
+  const codFee = (order.shipping_methods ?? []).reduce((total, method) =>
+    total + (method.data?.paymentMethod === "COD" ? amount(Number(method.data.cod_fee || 0)) : 0), 0)
+  const shipping = Math.max(0, shippingWithFees - codFee)
   const discount = amount(order.discount_total)
   const items = (order.items ?? []).map((item) => {
     const quantity = item.quantity ?? 1
@@ -86,7 +91,7 @@ export function renderOrderConfirmationEmail(order: ConfirmationOrder): string {
   }).join("")
   const subtotal = (order.items ?? []).reduce((total, item) =>
     total + (item.original_total != null ? amount(item.original_total) : amount(item.unit_price) * (item.quantity ?? 1)), 0)
-  const total = order.total != null ? amount(order.total) : subtotal + shipping - discount
+  const total = order.total != null ? amount(order.total) : subtotal + shippingWithFees - discount
   const address = order.shipping_address
   const name = address?.first_name?.trim() || order.customer?.first_name?.trim() || "Customer"
   const deliveryName = [address?.first_name, address?.last_name].filter(Boolean).join(" ") || name
@@ -105,11 +110,14 @@ export function renderOrderConfirmationEmail(order: ConfirmationOrder): string {
   const orderDate = dateParts.length ? `${datePart("day")} ${datePart("month")}, ${datePart("year")}` : ""
 
   return fill(ORDER_CONFIRMATION_MARKUP, {
-    reference: escapeHtml(`REF. ${order.display_id ?? order.id}`),
+    reference: escapeHtml(`REF. ${getOrderReference(order) || order.id}`),
     order_date: escapeHtml(orderDate),
     greeting_name: escapeHtml(name),
     items,
     shipping: shipping === 0 ? "Complimentary" : money(shipping),
+    cod_row: codFee > 0
+      ? `<tr><td class="muted" style="padding:5px 0;color:#77766f;">COD</td><td align="right" style="padding:5px 0;">${money(codFee)}</td></tr>`
+      : "",
     discount_row: discount > 0
       ? `<tr><td class="muted" style="padding:5px 0;color:#77766f;">Discount</td><td align="right" style="padding:5px 0;">−${money(discount)}</td></tr>`
       : "",

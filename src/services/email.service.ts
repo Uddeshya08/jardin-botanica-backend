@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { getOrderReference } from "../utils/order-reference";
 import { renderOrderConfirmationEmail, type ConfirmationOrder } from "./order-confirmation-template";
 import { ORDER_CONFIRMATION_LOGO_BASE64 } from "./order-confirmation-logo";
 
@@ -67,7 +68,7 @@ export async function sendOrderConfirmationEmail(order: ConfirmationOrder): Prom
     const emailResult = await resend.emails.send({
       from: fromEmail,
       to: recipientEmails,
-      subject: `Order Confirmation - Order #${order.display_id || order.id}`,
+      subject: `Order Confirmation - ${getOrderReference(order) || order.id}`,
       html: emailHtml,
       attachments: [{
         filename: "Jardin_Botanica_Wordmark_Ink.png",

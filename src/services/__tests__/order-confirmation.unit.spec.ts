@@ -35,7 +35,7 @@ describe("dispatch-note order confirmation template", () => {
   it("uses the supplied design with real order data and India-local order date", () => {
     const html = renderOrderConfirmationEmail(order)
     expect(html).toContain("Dear Uddeshya,")
-    expect(html).toContain("REF. 4831")
+    expect(html).toContain("REF. JB-26004831")
     expect(html).toContain("26 October, 2026")
     expect(html).toContain("CANDLE · 200 G")
     expect(html).toContain("QTY 04")
@@ -96,6 +96,19 @@ describe("dispatch-note order confirmation template", () => {
     expect(html).not.toContain("₹1,525.42")
   })
 
+  it("shows complimentary delivery and lists the COD handling fee separately", () => {
+    const html = renderOrderConfirmationEmail({
+      ...order,
+      total: 7300,
+      shipping_total: 100,
+      shipping_methods: [{ amount: 100, data: { paymentMethod: "COD", cod_fee: 100 } }],
+    })
+    expect(html).toContain("Complimentary")
+    expect(html).toContain(">COD</td>")
+    expect(html).toContain("₹100.00")
+    expect(html).toContain("₹7,300.00")
+  })
+
   it("handles absent optional data and derives totals only when the order total is absent", () => {
     const html = renderOrderConfirmationEmail({
       id: "order_fallback", created_at: "2026-10-26", customer: { first_name: "Guest" },
@@ -122,7 +135,7 @@ describe("dispatch-note order confirmation template", () => {
       const payload = client.emails.send.mock.calls[0][0]
       expect(payload.html).toBe(renderOrderConfirmationEmail(order))
       expect(payload.to).toContain(order.email)
-      expect(payload.subject).toContain("4831")
+      expect(payload.subject).toBe("Order Confirmation - JB-26004831")
       expect(payload.attachments[0].contentId).toBe("jardin-wordmark")
       expect(payload.attachments[0].content.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a")
     } finally {

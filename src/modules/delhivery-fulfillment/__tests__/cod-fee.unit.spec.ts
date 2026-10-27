@@ -6,6 +6,7 @@ jest.mock("../api-client", () => ({ DelhiveryApiClient: jest.fn() }));
 import DelhiveryFulfillmentProviderService from "../service";
 
 describe("fixed COD handling fee", () => {
+  const previousFreeShipping = process.env.FREE_SHIPPING_ENABLED;
   const service = Object.create(DelhiveryFulfillmentProviderService.prototype);
   const client = {
     calculateShippingCost: jest.fn(),
@@ -18,6 +19,7 @@ describe("fixed COD handling fee", () => {
   };
 
   beforeEach(() => {
+    delete process.env.FREE_SHIPPING_ENABLED;
     client.calculateShippingCost.mockClear();
     service.client_ = client;
     client.calculateShippingCost.mockResolvedValue([{ total_amount: 39.07 }]);
@@ -26,8 +28,13 @@ describe("fixed COD handling fee", () => {
     });
   });
 
-  it("adds exactly 100 to delivery for COD and removes it when switching to prepaid", async () => {
-    for (const [paymentMethod, amount] of [["COD", 139.07], ["COD", 139.07], ["PREPAID", 39.07]] as const) {
+  afterAll(() => {
+    if (previousFreeShipping === undefined) delete process.env.FREE_SHIPPING_ENABLED;
+    else process.env.FREE_SHIPPING_ENABLED = previousFreeShipping;
+  });
+
+  it("waives delivery while keeping exactly 100 for COD and removes it when switching to prepaid", async () => {
+    for (const [paymentMethod, amount] of [["COD", 100], ["COD", 100], ["PREPAID", 0]] as const) {
       const price = await service.calculatePrice(
         { shipping_mode: "Surface" }, { paymentMethod, cod_fee: 999 }, context,
       );
@@ -35,6 +42,16 @@ describe("fixed COD handling fee", () => {
       expect(client.calculateShippingCost).toHaveBeenLastCalledWith(
         expect.objectContaining({ paymentType: "Pre-paid" }),
       );
+    }
+  });
+
+  it("restores the calculated delivery charge when complimentary shipping is switched off", async () => {
+    process.env.FREE_SHIPPING_ENABLED = "false";
+    for (const [paymentMethod, expected] of [["COD", 139.07], ["PREPAID", 39.07]] as const) {
+      const price = await service.calculatePrice(
+        { shipping_mode: "Surface" }, { paymentMethod }, context,
+      );
+      expect(price.calculated_amount).toBe(expected);
     }
   });
 
