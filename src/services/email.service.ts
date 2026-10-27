@@ -132,26 +132,20 @@ function generatePasswordResetEmailTemplate(customerName: string, resetUrl: stri
         <!-- Content -->
         <div style="padding: 30px 20px;">
           <p style="font-size: 16px; margin-bottom: 10px;">Dear ${customerName},</p>
-          <p style="font-size: 16px; color: #666; margin-bottom: 20px;">We received a request to reset your password for your Jardin Botanica account.</p>
+          <p style="font-size: 16px; color: #666; margin-bottom: 20px;">We received a request to reset your password for your Jardin Botanica account. </br>You can set a new password using the link below.</p>
           
           <!-- Reset Button -->
           <div style="text-align: center; margin: 40px 0;">
             <a href="${resetUrl}" style="display: inline-block; background-color: #2c3e50; color: #ffffff; padding: 15px 40px; text-decoration: none; border-radius: 5px; font-size: 16px; font-weight: bold;">Reset Password</a>
           </div>
           
-          <!-- Instructions -->
-          <div style="background-color: #f8f9fa; padding: 20px; margin: 20px 0; border-radius: 8px; border-left: 4px solid #2c3e50;">
-            <p style="margin: 0 0 10px 0; color: #666; font-size: 14px;">If the button above doesn't work, copy and paste the following link into your browser:</p>
-            <p style="margin: 0; color: #2c3e50; font-size: 14px; word-break: break-all;">${resetUrl}</p>
-          </div>
-
           <!-- Security Note -->
           <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #e0e0e0;">
             <p style="color: #666; font-size: 14px; margin-bottom: 10px;"><strong>Important:</strong></p>
             <ul style="color: #666; font-size: 14px; margin: 10px 0; padding-left: 20px;">
-              <li>This link will expire in 15 minutes for security reasons</li>
-              <li>If you didn't request this password reset, you can safely ignore this email</li>
-              <li>Your password won't change until you access the link above and create a new one</li>
+              <li>This link will expire in 15 minutes.</li>
+              <li>If you didn't make this request, no action is needed. Your account remains secure.</li>
+              <li> Jardin Botanica</li>
             </ul>
           </div>
         </div>
