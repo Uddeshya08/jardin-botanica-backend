@@ -16,5 +16,11 @@ if [ -d /run/secrets ]; then
   done
 fi
 
+# Allow maintenance commands to use the same mounted secrets as the server.
+# With no arguments, the existing startup behavior is unchanged.
+if [ "$#" -gt 0 ]; then
+  exec "$@"
+fi
+
 # Run Medusa start command
 exec node node_modules/@medusajs/cli/cli.js start

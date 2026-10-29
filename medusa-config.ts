@@ -204,6 +204,7 @@ module.exports = defineConfig({
     {
       resolve: "./src/modules/customer-preferences",
     },
+    { resolve: "./src/modules/meta-conversion" },
     ...(r2FileModule ? [r2FileModule] : []),
   ],
 });
