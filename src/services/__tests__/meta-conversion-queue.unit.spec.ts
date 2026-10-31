@@ -97,11 +97,11 @@ describe("Meta CAPI queue isolation and retries", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it("skips absent consent and clears expired payloads", async () => {
+  it("respects recorded tracking refusals and clears expired payloads", async () => {
     await enqueueMetaOrder(container, "order_1");
-    query.graph.mockResolvedValue({ data: [{ id: "order_1", metadata: {} }] });
+    query.graph.mockResolvedValue({ data: [{ id: "order_1", metadata: { meta_capi_consent: false } }] });
     await processMetaConversions(container);
-    expect(rows[0]).toMatchObject({ status: "skipped", payload: null, last_error: "marketing_consent_missing" });
+    expect(rows[0]).toMatchObject({ status: "skipped", payload: null, last_error: "marketing_tracking_declined" });
     rows[0].status = "pending";
     rows[0].expires_at = new Date(0);
     await processMetaConversions(container);

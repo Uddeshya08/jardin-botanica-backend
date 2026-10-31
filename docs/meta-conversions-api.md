@@ -55,26 +55,51 @@ No production Meta calls were made during implementation. Credentials have not b
    The migration creates only `meta_conversion_event`. Do not run a migration blindly against a production database.
    The repository's package build/start scripts run migrations, but the Docker entrypoint does not.
    For the current Docker Swarm deployment, follow the container commands below before enabling tracking.
-2. Connect your marketing-consent collection to **order metadata** `meta_capi_consent: true`.
-   This integration does not assume that newsletter preferences imply marketing tracking consent.
-   Without this explicit boolean flag, no customer information is sent. No consent UI is added in this release.
+2. Deploy the storefront privacy disclosure describing Meta server-side purchase sharing. Checkout opt-in is not required by this implementation. Existing explicit refusals (`meta_capi_consent: false`) are respected. The merchant remains responsible for applicable privacy requirements.
 3. Set `META_CAPI_ENABLED=true` and restart the backend. Missing credentials do not block orders;
    the independent tracking subscriber/job logs a sanitized error instead.
 4. Ensure a Medusa worker that runs subscribers and scheduled jobs is operating.
-5. Place a fresh consented test order with the test code temporarily configured; confirm a fully captured
+5. Place a fresh test order with the test code temporarily configured; confirm a fully captured
    prepaid payment results in one Purchase in Test Events. Verify its currency, amount, and event ID.
 6. Disable the test code and verify real events appear in the dataset overview (reporting may be delayed).
 
 ```text
 order.placed → independent subscriber → persistent queue (order ID only)
                                                ↓ each minute
-                 order consent + payment eligibility checked
+                 recorded refusal + payment eligibility checked
                                                ↓
                      hashed Purchase → Meta dataset /events
                                                ↓
                   acknowledge → mark sent, clear payload
                   transient failure → backoff, same event ID
 ```
+
+## Create production Docker secrets
+
+Run [setup-meta-capi-secrets.sh](../scripts/setup-meta-capi-secrets.sh) on the **production Docker
+Swarm manager**, from a copy of the repository containing that script:
+
+```sh
+# Create missing secrets only; no service restart.
+bash scripts/setup-meta-capi-secrets.sh
+
+# Attach missing secrets and roll the service with Purchase tracking disabled.
+bash scripts/setup-meta-capi-secrets.sh --attach
+```
+
+The script prompts for the Dataset ID, hidden access token, and optional test event code. Use ordinary
+variable names for shell inputs; credential values themselves must never be variable names or pasted
+into shell commands. Existing secrets are kept without prompting or overwriting. Secrets are immutable;
+if an existing value is wrong, arrange a versioned-secret rotation rather than deleting a live secret.
+
+**Run the script successfully before deploying the updated `docker-stack.yml`.** That file now requires
+all three external Meta secrets. A skipped test code is stored as one space, which the CAPI config trims
+to an unset value. A real test code is still required to send a validation event. The stack file keeps
+`META_CAPI_ENABLED=false` and COD disabled; enable tracking later only after migration and privacy disclosure deployment.
+
+The script never reads back or prints a token and never sends an event to Meta. `--attach` updates
+`jd-backend_api` by default; use `--service=OTHER_SERVICE` to target a different confirmed service.
+It preserves other secrets/environment values, and its rolling restart should be followed by a health check.
 
 ## Production Docker Swarm deployment and validation
 
@@ -105,14 +130,14 @@ docker exec BACKEND_CONTAINER ./entrypoint.sh node node_modules/@medusajs/cli/cl
 The Meta variables must be present inside the container. Creating Docker secrets alone is insufficient:
 they must also be attached to the service. Do not add required external Meta secrets to `docker-stack.yml`
 until they exist, as that would fail the entire stack deployment. Credentials are not supplied by this
-commit. If testing before attaching persistent Meta secrets, use an operator session with those
+integration. The setup script above creates and attaches them. If testing before attaching persistent Meta secrets, use an operator session with those
 variables already exported and pass only variable names (not literal secret values) to Docker:
 
 ```sh
 docker exec -e META_PIXEL_ID -e META_CAPI_ACCESS_TOKEN -e META_TEST_EVENT_CODE BACKEND_CONTAINER ./entrypoint.sh node node_modules/@medusajs/cli/cli.js exec ./src/scripts/validate-meta-capi.js send-test expected-dataset-id=YOUR_DATASET_ID
 ```
 
-Keep `META_CAPI_ENABLED=false` until validation, the database migration, and the consent flow are
+Keep `META_CAPI_ENABLED=false` until validation, the database migration, and privacy disclosure deployment are
 complete. Check `/health` and the service logs following deployment. Confirm the test event in
 **JB Web Data**, verify its Dataset ID and owner, and compare the returned unique event ID.
 

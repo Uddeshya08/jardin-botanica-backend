@@ -49,6 +49,14 @@ services:
       - R2_FILE_URL
       - MSG91_AUTH_KEY
       - MSG91_OTP_TEMPLATE_ID
+      - META_PIXEL_ID
+      - META_CAPI_ACCESS_TOKEN
+      - META_TEST_EVENT_CODE
+    environment:
+      META_CAPI_ENABLED: "false"
+      META_CAPI_COD_PURCHASE: "disabled"
+      META_GRAPH_API_VERSION: "v26.0"
+      META_STOREFRONT_URL: "https://www.jardinbotanica.com"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
       interval: 30s
@@ -175,6 +183,13 @@ secrets:
   MSG91_AUTH_KEY:
     external: true
   MSG91_OTP_TEMPLATE_ID:
+    external: true
+  META_PIXEL_ID:
+    external: true
+  META_CAPI_ACCESS_TOKEN:
+    external: true
+  META_TEST_EVENT_CODE:
+    name: META_TEST_EVENT_CODE_v2
     external: true
 
 networks:

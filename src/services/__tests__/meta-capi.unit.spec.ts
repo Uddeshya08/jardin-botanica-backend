@@ -35,9 +35,10 @@ describe("Meta CAPI payload and client", () => {
     expect(metaQueueId("another_dataset", "order_123")).not.toBe(metaQueueId(config.datasetId, "order_123"));
   });
 
-  it("never sends without explicit marketing tracking consent", () => {
-    expect(buildMetaPurchase({ ...order(), metadata: {} }, config)).toEqual({ state: "skipped", reason: "marketing_consent_missing" });
-    expect(buildMetaPurchase({ ...order(), metadata: { meta_capi_consent: "true" } }, config).state).toBe("skipped");
+  it("allows purchases without checkout opt-in and respects a recorded refusal", () => {
+    expect(buildMetaPurchase({ ...order(), metadata: {} }, config).state).toBe("ready");
+    expect(buildMetaPurchase({ ...order(), metadata: null }, config).state).toBe("ready");
+    expect(buildMetaPurchase({ ...order(), metadata: { meta_capi_consent: false } }, config)).toEqual({ state: "skipped", reason: "marketing_tracking_declined" });
   });
 
   it("waits for full capture, including every payment collection", () => {

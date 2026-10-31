@@ -77,9 +77,9 @@ export type PurchaseDecision =
 
 export function buildMetaPurchase(order: MetaOrder, config: MetaConfig): PurchaseDecision {
   if (order.status === "canceled") return { state: "skipped", reason: "order_canceled" };
-  // This explicit order metadata flag must come from the store's marketing-consent flow.
-  if (order.metadata?.meta_capi_consent !== true) {
-    return { state: "skipped", reason: "marketing_consent_missing" };
+  // No checkout opt-in is required; preserve any previously recorded refusal.
+  if (order.metadata?.meta_capi_consent === false) {
+    return { state: "skipped", reason: "marketing_tracking_declined" };
   }
   const collections = order.payment_collections || [];
   const cod = order.shipping_methods?.at(-1)?.data?.paymentMethod === "COD" ||
