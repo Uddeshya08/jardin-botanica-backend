@@ -14,6 +14,7 @@ describe("Meta CAPI queue isolation and retries", () => {
   let logger: any;
 
   beforeEach(() => {
+    delete process.env.META_CAPI_COD_PURCHASE;
     process.env.META_CAPI_ENABLED = "true";
     process.env.META_PIXEL_ID = "123456789";
     process.env.META_CAPI_ACCESS_TOKEN = "test-private-token";
@@ -52,6 +53,28 @@ describe("Meta CAPI queue isolation and retries", () => {
     await processMetaConversions(container);
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(rows[0]).toMatchObject({ status: "sent", payload: null, attempts: 1 });
+  });
+
+  it("requests complete calculation inputs and sends the unpaid COD order total", async () => {
+    process.env.META_CAPI_COD_PURCHASE = "order_placed";
+    query.graph.mockResolvedValue({ data: [{
+      id: "order_1", total: 1900, currency_code: "inr", created_at: new Date(),
+      email: "customer@example.com", metadata: {},
+      items: [{ product_id: "prod_candle", quantity: 1, unit_price: 1800 }],
+      shipping_methods: [{ amount: 100, data: { paymentMethod: "COD" } }],
+      payment_collections: [{ status: "authorized", captured_amount: 0,
+        payments: [{ provider_id: "pp_system_default" }] }],
+    }] });
+    await enqueueMetaOrder(container, "order_1");
+    await processMetaConversions(container);
+    expect(query.graph.mock.calls[0][0].fields).toEqual(expect.arrayContaining([
+      "total", "*items", "*items.detail", "*items.tax_lines", "*items.adjustments",
+      "*shipping_methods", "*shipping_methods.tax_lines", "*shipping_methods.adjustments", "*credit_lines",
+    ]));
+    const request = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+    expect(request.data[0].custom_data).toMatchObject({ value: 1900, currency: "INR" });
+    expect(request.test_event_code).toBeUndefined();
+    expect(rows[0]).toMatchObject({ status: "sent", attempts: 1 });
   });
 
   it("never promotes queued test purchases to live events after configuration changes", async () => {

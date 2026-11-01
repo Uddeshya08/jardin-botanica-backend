@@ -3,6 +3,7 @@ import { META_CONVERSION_MODULE } from "../modules/meta-conversion";
 import type MetaConversionService from "../modules/meta-conversion/service";
 import { buildMetaPurchase, getMetaConfig, metaEnabled } from "../services/meta-capi";
 import type { MetaOrder } from "../services/meta-capi";
+import { META_ORDER_FIELDS } from "../services/meta-order-query";
 
 export default async function checkMetaReadiness({ container, args }: ExecArgs): Promise<void> {
   const config = getMetaConfig();
@@ -25,16 +26,14 @@ export default async function checkMetaReadiness({ container, args }: ExecArgs):
     console.log("No event sent. Add order=order_ID to inspect a specific order's eligibility without sending it.");
     return;
   }
-  const { data } = await container.resolve("query").graph({ entity: "order", fields: [
-    "id", "status", "created_at", "total", "currency_code", "email", "customer_id", "metadata",
-    "shipping_address.phone", "shipping_address.country_code", "shipping_methods.data",
-    "items.product_id", "items.quantity", "payment_collections.status", "payment_collections.captured_amount",
-    "payment_collections.completed_at", "payment_collections.payments.provider_id",
-  ], filters: { id: orderId } });
+  const { data } = await container.resolve("query").graph({ entity: "order", fields: META_ORDER_FIELDS,
+    filters: { id: orderId } });
   if (!data[0]) throw new Error("Order not found");
   const decision = buildMetaPurchase(data[0] as unknown as MetaOrder, config);
   const rows = await service.listMetaConversionEvents({ order_id: orderId }, { take: 5 });
   console.log(JSON.stringify({ order_id: orderId, eligibility: decision.state,
+    order_total: data[0].total ?? null,
+    order_currency: data[0].currency_code ?? null,
     ...(decision.state === "ready" ? {
       event_id: decision.event.event_id,
       value: decision.event.custom_data?.value,

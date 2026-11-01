@@ -3,6 +3,7 @@ import { META_CONVERSION_MODULE } from "../modules/meta-conversion";
 import type MetaConversionService from "../modules/meta-conversion/service";
 import { buildMetaPurchase, getMetaConfig, metaEnabled, metaQueueId, MetaRequestError, sendMetaEvent } from "./meta-capi";
 import type { MetaEvent, MetaOrder } from "./meta-capi";
+import { META_ORDER_FIELDS } from "./meta-order-query";
 
 export async function enqueueMetaOrder(container: MedusaContainer, orderId: string): Promise<void> {
   if (!metaEnabled()) return;
@@ -41,16 +42,13 @@ export async function processMetaConversions(container: MedusaContainer): Promis
     const attempt = row.attempts + 1;
     try {
       const query = container.resolve("query");
-      const { data } = await query.graph({ entity: "order", fields: [
-        "id", "status", "created_at", "total", "currency_code", "email", "customer_id", "metadata",
-        "shipping_address.phone", "shipping_address.country_code", "shipping_methods.data",
-        "items.product_id", "items.quantity", "payment_collections.status", "payment_collections.captured_amount",
-        "payment_collections.completed_at", "payment_collections.payments.provider_id",
-      ], filters: { id: row.order_id } });
+      const { data } = await query.graph({ entity: "order", fields: META_ORDER_FIELDS,
+        filters: { id: row.order_id } });
       if (!data[0]) throw new MetaRequestError(true, "order_not_available");
       const decision = buildMetaPurchase(data[0] as unknown as MetaOrder, config);
       if (decision.state === "skipped") {
         await service.updateMetaConversionEvents({ id: row.id, status: "skipped", payload: null, last_error: decision.reason });
+        logger.info(`Meta CAPI: skipped ${row.order_id}; ${decision.reason}`);
         continue;
       }
       if (decision.state === "waiting") {
