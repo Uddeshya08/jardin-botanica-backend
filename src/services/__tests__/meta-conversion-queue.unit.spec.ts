@@ -68,8 +68,8 @@ describe("Meta CAPI queue isolation and retries", () => {
     await enqueueMetaOrder(container, "order_1");
     await processMetaConversions(container);
     expect(query.graph.mock.calls[0][0].fields).toEqual(expect.arrayContaining([
-      "total", "*items", "*items.detail", "*items.tax_lines", "*items.adjustments",
-      "*shipping_methods", "*shipping_methods.tax_lines", "*shipping_methods.adjustments", "*credit_lines",
+      "total", "items.*", "items.detail.*", "items.tax_lines.*", "items.adjustments.*",
+      "shipping_methods.*", "shipping_methods.tax_lines.*", "shipping_methods.adjustments.*", "credit_lines.*",
     ]));
     const request = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
     expect(request.data[0].custom_data).toMatchObject({ value: 1900, currency: "INR" });
