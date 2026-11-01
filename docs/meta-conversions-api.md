@@ -74,32 +74,33 @@ order.placed → independent subscriber → persistent queue (order ID only)
                   transient failure → backoff, same event ID
 ```
 
-## Create production Docker secrets
+## Production live tracking configuration
 
-Run [setup-meta-capi-secrets.sh](../scripts/setup-meta-capi-secrets.sh) on the **production Docker
-Swarm manager**, from a copy of the repository containing that script:
+The production stack enables `META_CAPI_ENABLED=true` and
+`META_CAPI_COD_PURCHASE=order_placed`. A COD Purchase represents order placement,
+not cash collection or successful delivery. Subsequent cancellations and failed
+deliveries do not automatically retract a Purchase already sent.
+
+The stack requires only the external `META_PIXEL_ID` and `META_CAPI_ACCESS_TOKEN`
+secrets. It leaves `META_TEST_EVENT_CODE` empty and does not mount the test-code
+secret. Keep the existing test secret in Swarm for future validation if needed;
+do not delete credentials to switch reporting modes.
+
+To apply these settings directly to the current service after validation:
 
 ```sh
-# Create missing secrets only; no service restart.
-bash scripts/setup-meta-capi-secrets.sh
-
-# Attach missing secrets and roll the service with Purchase tracking disabled.
-bash scripts/setup-meta-capi-secrets.sh --attach
+docker service update \
+  --env-add META_CAPI_ENABLED=true \
+  --env-add META_CAPI_COD_PURCHASE=order_placed \
+  --env-add META_TEST_EVENT_CODE= \
+  --secret-rm META_TEST_EVENT_CODE_v2 \
+  jd-backend_api
 ```
 
-The script prompts for the Dataset ID, hidden access token, and optional test event code. Use ordinary
-variable names for shell inputs; credential values themselves must never be variable names or pasted
-into shell commands. Existing secrets are kept without prompting or overwriting. Secrets are immutable;
-if an existing value is wrong, arrange a versioned-secret rotation rather than deleting a live secret.
-
-**Run the script successfully before deploying the updated `docker-stack.yml`.** That file now requires
-all three external Meta secrets. A skipped test code is stored as one space, which the CAPI config trims
-to an unset value. A real test code is still required to send a validation event. The stack file keeps
-`META_CAPI_ENABLED=false` and COD disabled; enable tracking later only after migration and privacy disclosure deployment.
-
-The script never reads back or prints a token and never sends an event to Meta. `--attach` updates
-`jd-backend_api` by default; use `--service=OTHER_SERVICE` to target a different confirmed service.
-It preserves other secrets/environment values, and its rolling restart should be followed by a health check.
+This rolls the backend service. Check service convergence and `/health`.
+New orders use live mode. Existing queued events retain their original test code;
+removing the secret does not convert queued test events into live events. Orders
+already skipped because COD was disabled are not automatically replayed.
 
 ## Production Docker Swarm deployment and validation
 
@@ -130,7 +131,7 @@ docker exec BACKEND_CONTAINER ./entrypoint.sh node node_modules/@medusajs/cli/cl
 The Meta variables must be present inside the container. Creating Docker secrets alone is insufficient:
 they must also be attached to the service. Do not add required external Meta secrets to `docker-stack.yml`
 until they exist, as that would fail the entire stack deployment. Credentials are not supplied by this
-integration. The setup script above creates and attaches them. If testing before attaching persistent Meta secrets, use an operator session with those
+integration. If testing before attaching persistent Meta secrets, use an operator session with those
 variables already exported and pass only variable names (not literal secret values) to Docker:
 
 ```sh
