@@ -38,6 +38,7 @@ export default async function checkMetaReadiness({ container, args }: ExecArgs):
       event_id: decision.event.event_id,
       value: decision.event.custom_data?.value,
       currency: decision.event.custom_data?.currency,
+      matching_fields: Object.keys(decision.event.user_data),
     } : { reason: decision.reason }),
     queue: rows.map((row) => ({ dataset_id: row.dataset_id, status: row.status, attempts: row.attempts, last_error: row.last_error })),
   }, null, 2));

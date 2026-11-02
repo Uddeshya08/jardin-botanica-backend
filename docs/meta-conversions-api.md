@@ -1,8 +1,6 @@
 # Meta Conversions API
 
-This first integration sends **Purchase** events from the backend only. No browser Pixel, page views,
-cart events, or checkout events are installed. Existing order, fulfillment, payment, email, and
-storefront code is unchanged. No dependency installation is needed (Node 22 native fetch).
+Purchase events are sent from the backend through CAPI. The storefront sends **ViewContent** and **AddToCart** through the browser Meta Pixel. Browser Purchase events and checkout events are not installed. The backend uses Node 22 native fetch.
 
 ## Configuration
 
@@ -152,8 +150,7 @@ complete. Check `/health` and the service logs following deployment. Confirm the
 - Order total includes whatever Medusa includes in its calculated total, including shipping and tax.
   Medusa v2 major currency units are sent unchanged: INR 1800 stays 1800, not 18.
 - Email is trimmed/lowercased and SHA-256 hashed. Phones are normalized to international digits and
-  hashed; ambiguous international numbers are omitted. Customer ID is also hashed. Names, addresses,
-  IPs, browser user agents, tokens, and raw Meta response bodies are not logged or included.
+  hashed; ambiguous international numbers are omitted. Customer ID is also hashed. First/last names, city, state, postal code and country are also normalized and hashed for matching. Stored customer profile metadata `gender` and `date_of_birth` is included only when present and valid; no demographic values are inferred and no new form fields are added. Street addresses, IPs, browser user agents, tokens, and raw Meta response bodies are not included in Purchase payloads or logs.
 - No `_fbp`, `_fbc`, or browser context is fabricated. Their collection and browser Pixel integration
   are separate future work. Match quality and ad attribution may be lower without them.
 - Payloads contain matching hashes only and are deleted from queue rows after sent/skipped/failed.
@@ -188,3 +185,29 @@ order by created_at desc;
 - [Meta CAPI usage](https://developers.facebook.com/docs/marketing-api/conversions-api/using-the-api/)
 - [Official Meta event request implementation](https://github.com/facebook/facebook-nodejs-business-sdk/blob/main/src/objects/serverside/event-request.js)
 - [Official Meta user-data implementation](https://github.com/facebook/facebook-nodejs-business-sdk/blob/main/src/objects/serverside/user-data.js)
+
+## Browser product and cart events
+
+Set `NEXT_PUBLIC_META_PIXEL_ID=1489706953077337` in the storefront hosting/build
+settings before building. This is a public identifier and must match backend
+`META_PIXEL_ID`. Do not put the CAPI access token in frontend environment variables.
+An empty/invalid public Pixel ID disables browser tracking. No new backend migration
+or dependency installation is needed.
+
+- `ViewContent` fires once per product-page visit, with the product ID and available
+  calculated price/currency. React effect replay and variant rerenders do not add views.
+- `AddToCart` fires after a successful cart mutation, including quick-add, product,
+  recommendations, sticky cart and gift-set flows. Quantity replacement sends only
+  positive increases; failed additions, unchanged quantities, and decreases do not send.
+- Both events use product IDs, matching Purchase content IDs, and Medusa major currency
+  units. Browser events have unique IDs. Purchase remains server-only.
+- A recorded cookie-banner rejection suppresses browser events. Browser blockers can
+  prevent these events; they have no durable queue. Pixel automatically handles its
+  browser cookies; fbc/fbp forwarding to server Purchase and ParamBuilder are not added.
+- Validate with Meta Test Events browser testing tools or Meta Pixel Helper, using a
+  test product view, successful add, failed add and a quantity decrease. Browser event
+  test tooling is separate from backend `META_TEST_EVENT_CODE`.
+
+Purchase user-data API keys: `fn`, `ln`, `ct`, `st`, `zp` (postal code), `country`,
+`ge` (gender) and `db` (date of birth). All supplied matching values are normalized
+and SHA-256 hashed. No raw names/locations/demographics are logged.

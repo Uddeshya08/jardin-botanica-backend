@@ -1,4 +1,11 @@
 import { createHash } from "node:crypto";
+import { normalizeMetaMatchValue } from "./meta-match-data";
+
+type MetaAddress = {
+  phone?: string | null; country_code?: string | null;
+  first_name?: string | null; last_name?: string | null;
+  city?: string | null; province?: string | null; postal_code?: string | null;
+};
 
 export type MetaConfig = {
   datasetId: string;
@@ -27,7 +34,10 @@ export type MetaOrder = {
   email?: string | null;
   customer_id?: string | null;
   metadata?: Record<string, unknown> | null;
-  shipping_address?: { phone?: string | null; country_code?: string | null } | null;
+  shipping_address?: MetaAddress | null;
+  billing_address?: MetaAddress | null;
+  customer?: { first_name?: string | null; last_name?: string | null;
+    metadata?: Record<string, unknown> | null } | null;
   shipping_methods?: { data?: Record<string, unknown> | null }[];
   payment_collections?: {
     status: string;
@@ -124,6 +134,22 @@ export function buildMetaPurchase(order: MetaOrder, config: MetaConfig): Purchas
   if (phone) userData.ph = [hashMetaValue(phone)];
   if (order.customer_id) userData.external_id = [hashMetaValue(order.customer_id)];
   if (!Object.keys(userData).length) return { state: "skipped", reason: "no_customer_match_identifiers" };
+  const address = order.billing_address || order.shipping_address;
+  const country = normalizeMetaMatchValue("country", address?.country_code);
+  // Only use explicitly supplied customer profile metadata for demographics.
+  // The current storefront does not persist these fields; no values are invented.
+  const matching: Record<string, unknown> = {
+    fn: order.customer?.first_name || address?.first_name,
+    ln: order.customer?.last_name || address?.last_name,
+    ct: address?.city, st: address?.province, zp: address?.postal_code,
+    country: address?.country_code,
+    ge: order.customer?.metadata?.gender,
+    db: order.customer?.metadata?.date_of_birth,
+  };
+  for (const [field, input] of Object.entries(matching)) {
+    const normalized = normalizeMetaMatchValue(field, input, country);
+    if (normalized) userData[field] = [hashMetaValue(normalized)];
+  }
   return { state: "ready", event: {
     event_name: "Purchase", event_time: eventTime, event_id: metaPurchaseId(order.id),
     action_source: "website", event_source_url: new URL("/in", config.storefrontUrl).href,

@@ -5,6 +5,11 @@
 export const META_ORDER_FIELDS = [
   "id", "status", "created_at", "total", "currency_code", "email", "customer_id", "metadata",
   "shipping_address.phone", "shipping_address.country_code",
+  "shipping_address.first_name", "shipping_address.last_name", "shipping_address.city",
+  "shipping_address.province", "shipping_address.postal_code",
+  "billing_address.first_name", "billing_address.last_name", "billing_address.city",
+  "billing_address.province", "billing_address.postal_code", "billing_address.country_code",
+  "customer.first_name", "customer.last_name", "customer.metadata",
   "items.*", "items.detail.*", "items.tax_lines.*", "items.adjustments.*",
   "shipping_methods.*", "shipping_methods.tax_lines.*", "shipping_methods.adjustments.*",
   "credit_lines.*",
