@@ -1,6 +1,6 @@
 # Meta Conversions API
 
-Purchase events are sent from the backend through CAPI. The storefront sends **ViewContent** and **AddToCart** through the browser Meta Pixel. Browser Purchase events and checkout events are not installed. The backend uses Node 22 native fetch.
+PageView, ViewContent, AddToCart and Purchase support paired Pixel/CAPI reports with the same event name, dataset and event ID. Purchase CAPI remains independently driven by order.placed; the browser reads its canonical eligibility and value on confirmation. The backend uses Node 22 native fetch. See the rollout steps below before deploying the new relay.
 
 ## Configuration
 
@@ -152,13 +152,13 @@ complete. Check `/health` and the service logs following deployment. Confirm the
 - Email is trimmed/lowercased and SHA-256 hashed. Phones are normalized to international digits and
   hashed; ambiguous international numbers are omitted. Customer ID is also hashed. First/last names, city, state, postal code and country are also normalized and hashed for matching. Stored customer profile metadata `gender` and `date_of_birth` is included only when present and valid; no demographic values are inferred and no new form fields are added. Street addresses, IPs, browser user agents, tokens, and raw Meta response bodies are not included in Purchase payloads or logs.
 - No `_fbp`, `_fbc`, or browser context is fabricated. Their collection and browser Pixel integration
-  are separate future work. Match quality and ad attribution may be lower without them.
-- Payloads contain matching hashes only and are deleted from queue rows after sent/skipped/failed.
+  are forwarded only when actually available for paired page/product/cart events. ParamBuilder is not installed. Server Purchase does not yet capture shopper browser context.
+- Purchase payloads contain matching hashes and are deleted from queue rows after sent/skipped/failed. The separate browser-event queue temporarily contains real browser/network context and clears its payload after sent/failed.
   Stable receipt rows remain to prevent re-enqueueing. Hashes are still personal data; include this
   table in your retention and customer-erasure procedures.
 - Event IDs use `purchase_<order_id>`. The primary key is deterministic per dataset/order. Repeated
   subscriber events do not create additional queue rows. Retries use the same event name/ID for Meta
-  deduplication; a future browser Purchase must use that same ID.
+  deduplication; the browser Purchase uses that same ID.
 - Polls at most 20 pending rows per minute. Ten failed attempts maximum with exponential backoff,
   capped at one hour. Network timeout is five seconds. Pending payment can wait up to seven days;
   ready events are sent/retried only within 24 hours of purchase time, keeping retries within Meta's
@@ -191,8 +191,7 @@ order by created_at desc;
 Set `NEXT_PUBLIC_META_PIXEL_ID=1489706953077337` in the storefront hosting/build
 settings before building. This is a public identifier and must match backend
 `META_PIXEL_ID`. Do not put the CAPI access token in frontend environment variables.
-An empty/invalid public Pixel ID disables browser tracking. No new backend migration
-or dependency installation is needed.
+An empty/invalid public Pixel ID disables browser tracking. Paired CAPI forwarding requires the browser-event queue migration and relay credentials described below. No dependency installation is needed.
 
 - `ViewContent` fires once per product-page visit, with the product ID and available
   calculated price/currency. React effect replay and variant rerenders do not add views.
@@ -200,10 +199,9 @@ or dependency installation is needed.
   recommendations, sticky cart and gift-set flows. Quantity replacement sends only
   positive increases; failed additions, unchanged quantities, and decreases do not send.
 - Both events use product IDs, matching Purchase content IDs, and Medusa major currency
-  units. Browser events have unique IDs. Purchase remains server-only.
+  units. Page/product/cart events each receive a unique ID shared by Pixel and CAPI. Purchase uses purchase_<order_id> on both paths.
 - A recorded cookie-banner rejection suppresses browser events. Browser blockers can
-  prevent these events; they have no durable queue. Pixel automatically handles its
-  browser cookies; fbc/fbp forwarding to server Purchase and ParamBuilder are not added.
+  prevent browser events. JavaScript forwards corresponding events to a durable backend queue through a first-party relay. Existing fbc/fbp cookies are forwarded for these server counterparts, but are never fabricated. ParamBuilder is not installed.
 - Validate with Meta Test Events browser testing tools or Meta Pixel Helper, using a
   test product view, successful add, failed add and a quantity decrease. Browser event
   test tooling is separate from backend `META_TEST_EVENT_CODE`.
@@ -211,3 +209,107 @@ or dependency installation is needed.
 Purchase user-data API keys: `fn`, `ln`, `ct`, `st`, `zp` (postal code), `country`,
 `ge` (gender) and `db` (date of birth). All supplied matching values are normalized
 and SHA-256 hashed. No raw names/locations/demographics are logged.
+## Paired event rollout (2026-11-06)
+
+The code is dormant unless the relay is configured. **Create the external Docker
+secret before deploying the updated stack**, which now requires it:
+
+1. Generate one random 32+ character credential in a password manager. Keep it
+   available to paste into both Docker and Vercel. It is not a Meta access token.
+2. On the Swarm manager, check whether the secret already exists. Existing Docker
+   secrets are immutable; rotate a wrong value rather than deleting a live secret.
+
+   ```sh
+   docker secret inspect META_CAPI_RELAY_SECRET --format '{{.Spec.Name}}'
+   # Only if missing:
+   read -r -s -p 'Relay credential: ' meta_relay_secret
+   printf '%s' "$meta_relay_secret" | docker secret create META_CAPI_RELAY_SECRET -
+   unset meta_relay_secret
+   ```
+
+3. Deploy backend code. The stack persists `META_CAPI_BROWSER_EVENTS_ENABLED=true`
+   and attaches the secret. Apply the additive migration `Migration20261106000000`
+   to create `meta_browser_event`. Original Purchase queue behavior is unchanged.
+   The new browser job may log an unavailable-table error until migration finishes.
+   The frontend should not receive its relay credential until migration is complete.
+4. For this installation's non-SSL PostgreSQL server, use the previously validated
+   process-only SSL override (replace BACKEND_CONTAINER with the new container ID):
+
+   ```sh
+   docker exec BACKEND_CONTAINER ./entrypoint.sh node -e '
+   const { spawnSync } = require("node:child_process");
+   const u = new URL(process.env.DATABASE_URL);
+   u.searchParams.set("ssl_mode", "disable");
+   u.searchParams.set("sslmode", "disable");
+   const result = spawnSync(process.execPath, [
+     "node_modules/@medusajs/cli/cli.js", "db:migrate"
+   ], { stdio: "inherit", env: { ...process.env, DATABASE_URL: u.toString(), PGSSLMODE: "disable" } });
+   process.exit(result.status ?? 1);
+   '
+   ```
+
+5. In Vercel **Production**, set server-only `META_CAPI_RELAY_SECRET` to the same
+   credential. Keep `NEXT_PUBLIC_META_PIXEL_ID=1489706953077337` and the production
+   backend URLs configured. Redeploy the frontend. Never prefix the relay credential
+   or Meta access token with NEXT_PUBLIC_. No Meta access token belongs in Vercel.
+6. Run the readiness script and confirm `browser_pairing_enabled: true` and
+   `browser_queue_table_available: true`. Both workers must run on the backend.
+
+### Identity and delivery rules
+
+- A PageView, ViewContent or AddToCart generates one UUID in the browser. The exact
+  name and ID are supplied to Pixel `eventID` and server `event_id`. A first-party
+  `/api/meta/events` route authenticates the call to the backend with the relay
+  credential. It uses HTTP browser context, not client-submitted IP or user agent.
+- Repeat admission and delivery attempts retain the same event identity. Browser
+  transport retries once; the persistent browser queue retries up to ten attempts
+  within 24 hours. Sent/failed payloads are cleared. Stable receipt IDs remain.
+- Page/product/cart events require JavaScript. A blocked Meta script can still leave
+  the first-party relay working, but JavaScript blockers, network failures and closing
+  a page can prevent both paths. The noscript PageView is browser-only.
+- The separate browser queue processes up to 50 rows per minute. Purchase retains
+  its independent queue and scheduler, preventing page views from taking its slots.
+  Use one scheduler instance. Delivery is at least once, not exactly once.
+- Browser Purchase does not enqueue or resend CAPI Purchase. It requests a read-only
+  server plan after order confirmation, waits up to about one minute for capture/
+  subscriber readiness, and uses `purchase_<order_id>` with the canonical CAPI
+  value/currency. COD follows the existing order_placed rule; prepaid requires full
+  capture. Browser events do not carry names, email addresses or matching hashes.
+- A per-tab receipt suppresses repeat browser Purchases on reload; stable IDs let
+  Meta recognize repeats across tabs as well. Orders outside the 24-hour eligibility
+  window and old skipped/failed/test receipts never become new browser Purchases.
+- Matching dataset IDs are enforced. Canceled orders and recorded refusals are
+  excluded. Cookie rejection suppresses browser events and derived page/product/cart
+  server reports; existing independent Purchase consent behavior is unchanged.
+- This paired page/product/cart relay is **live mode only**. It refuses new events
+  while META_TEST_EVENT_CODE is set. Queued live events remain live if configuration
+  later changes. Browser Purchase is suppressed for server test-mode configuration
+  and pinned test receipts. Do not attach a test code during this live rollout.
+- Preview origins are excluded from the relay. Rate limiting is per Vercel instance
+  (120 requests per IP per minute, bounded memory); it is not a distributed anti-bot
+  system. Backend relay authentication, schema checks and size limits supplement it.
+- New browser events collect available real IP/user-agent and existing fbc/fbp;
+  include the new queue in retention and customer-erasure procedures. They do not
+  change the existing hashed matching fields on independent CAPI Purchase.
+
+### Verification without replaying customer orders
+
+Use a fresh page view and successful add. In browser DevTools, compare the Pixel
+request's event ID with the JSON `event_id` sent to `/api/meta/events`. In the
+backend queue/logs, confirm the identical name/ID is acknowledged. Do not reset
+sent receipts to test deduplication.
+
+For a fresh eligible order, the browser plan and existing CAPI queue must both use
+`purchase_<order_id>` with the same dataset. Verify Meta's event details show Browser
+and Server sources and inspect deduplication diagnostics after processing. Receiving
+two reports is expected; mismatched IDs/names/datasets would prevent pairing.
+
+Inspect receipt state without printing payloads:
+
+```sql
+select event_name, event_id, dataset_id, status, attempts, last_error
+from meta_browser_event
+where deleted_at is null
+order by created_at desc
+limit 20;
+```

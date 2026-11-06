@@ -4,6 +4,7 @@ import type MetaConversionService from "../modules/meta-conversion/service";
 import { buildMetaPurchase, getMetaConfig, metaEnabled } from "../services/meta-capi";
 import type { MetaOrder } from "../services/meta-capi";
 import { META_ORDER_FIELDS } from "../services/meta-order-query";
+import { metaRelayEnabled } from "../services/meta-browser-events";
 
 export default async function checkMetaReadiness({ container, args }: ExecArgs): Promise<void> {
   const config = getMetaConfig();
@@ -13,12 +14,19 @@ export default async function checkMetaReadiness({ container, args }: ExecArgs):
   } catch {
     throw new Error("Meta queue table is unavailable. Apply the module migration before enabling Purchase tracking.");
   }
+  let browserQueueAvailable = false;
+  try {
+    await service.listMetaBrowserEvents({}, { take: 1, select: ["id"] });
+    browserQueueAvailable = true;
+  } catch { /* Expected until the additive browser-event migration is applied. */ }
   console.log(JSON.stringify({
     dataset_id: config.datasetId,
     queue_table_available: true,
     purchase_tracking_enabled: metaEnabled(),
     test_mode_configured: Boolean(config.testEventCode),
     cod_mode: process.env.META_CAPI_COD_PURCHASE === "order_placed" ? "order_placed" : "disabled",
+    browser_pairing_enabled: metaRelayEnabled(),
+    browser_queue_table_available: browserQueueAvailable,
   }, null, 2));
 
   const orderId = args.find((arg) => arg.startsWith("order="))?.slice(6);

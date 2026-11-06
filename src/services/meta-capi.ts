@@ -21,7 +21,7 @@ export type MetaEvent = {
   event_id: string;
   action_source: "website";
   event_source_url: string;
-  user_data: Record<string, string[]>;
+  user_data: Record<string, string[] | string>;
   custom_data?: Record<string, unknown>;
 };
 
