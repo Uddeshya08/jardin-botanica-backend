@@ -42,8 +42,11 @@ container on its next deployment. That buffer is not time-based retention.
 
 ## Access and persistence
 
-Loki (`3100`) and Alloy (`12345`) publish on `127.0.0.1` only. They are not on the
-Traefik network and do not have public routes. Loki has no application-level
+Loki (`3100`) and Alloy (`12345`) publish on `127.0.0.1` only, using a dedicated
+bridge network. This network allows outbound connections; it is not an
+`internal: true` network, because recent Docker versions do not publish ports
+from internal-only networks. They are not on the Traefik network and do not have
+public routes. Loki has no application-level
 authentication: keep it restricted to trusted server users or an authenticated
 SSH tunnel, and do not change these bindings to `0.0.0.0`.
 
@@ -55,7 +58,9 @@ a read-only root filesystem, but these do not constrain Docker API privileges.
 
 The fixed named volumes are `jd-logging-loki-data` and `jd-logging-alloy-data`.
 Loki's archive, compactor markers and ingestion WAL are stored in the first;
-Alloy's read positions are stored in the second. Do not use `docker compose down
+Alloy's read positions are stored in the second, mounted at `/data`. A fresh
+mount is used rather than inheriting the image's restricted data-directory
+ownership. Do not use `docker compose down
 -v`, delete these volumes, or include them in a volume-pruning job. A host disk
 failure still requires backups/remote storage to recover logs.
 

@@ -64,7 +64,9 @@ jobs:
           grep -F "$marker" "$RUNNER_TEMP/logging-probe.log"
       - name: Show diagnostics
         if: failure()
-        run: docker compose -f ops/logging/compose.yml logs --tail 100
+        run: |
+          docker compose -f ops/logging/compose.yml ps -a
+          docker compose -f ops/logging/compose.yml logs --tail 100
       - name: Clean up isolated CI containers and volumes
         if: always()
         run: |
