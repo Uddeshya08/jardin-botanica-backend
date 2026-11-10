@@ -100,8 +100,10 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "10m"
-        max-file: "3"
+        # Local replay buffer for the collector; eight-day retention is handled
+        # separately by ops/logging. File sizes alone do not ensure a time range.
+        max-size: "50m"
+        max-file: "5"
 secrets:
   MEDUSA_ADMIN_ONBOARDING_TYPE:
     external: true

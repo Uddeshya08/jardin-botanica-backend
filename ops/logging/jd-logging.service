@@ -1,0 +1,27 @@
+[Unit]
+Description=Jardin Botanica persistent Docker log archive
+Requires=docker.service
+Wants=network-online.target
+After=docker.service network-online.target
+PartOf=docker.service
+RequiresMountsFor=/opt/jd-logging /var/lib/docker
+StartLimitIntervalSec=0
+
+[Service]
+# Bootstrap Compose once; Docker's restart policies supervise the containers.
+# This service does not run a competing foreground container supervisor.
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/jd-logging
+ExecStartPre=/usr/bin/docker compose -f /opt/jd-logging/compose.yml config --quiet
+# Images are pulled during installation, never fetched/changed during boot.
+ExecStart=/usr/bin/docker compose -f /opt/jd-logging/compose.yml up -d --pull never
+# Stop containers gracefully without deleting the archive or read positions.
+ExecStop=/usr/bin/docker compose -f /opt/jd-logging/compose.yml stop --timeout 60
+TimeoutStartSec=180
+TimeoutStopSec=150
+Restart=on-failure
+RestartSec=15s
+
+[Install]
+WantedBy=multi-user.target

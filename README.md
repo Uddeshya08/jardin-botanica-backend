@@ -112,6 +112,13 @@ The phone number must resolve to exactly one existing customer with an account
 and an email. Duplicate phone assignments are rejected rather than selecting an
 ambiguous customer.
 
+## Production log retention
+
+The separate [persistent logging setup](ops/logging/README.md) collects backend
+Docker logs into Loki with eight-day retention, automatic expiry, and time/ID
+searches that can be exported to a file. It must be installed on the backend
+host; deploying the application stack alone does not install the archive.
+
 ## What is Medusa
 
 Medusa is a set of commerce modules and tools that allow you to build rich, reliable, and performant commerce applications without reinventing core commerce logic. The modules can be customized and used to build advanced ecommerce stores, marketplaces, or any product that needs foundational commerce primitives. All modules are open-source and freely available on npm.

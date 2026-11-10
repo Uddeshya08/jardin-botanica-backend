@@ -1,0 +1,77 @@
+name: jd-logging
+
+# Run with Docker Compose on each host running jd-backend_api, separately from
+# the application Swarm stack. Do not attach this network to Traefik.
+services:
+  loki:
+    image: grafana/loki:3.7.9
+    command: ["-config.file=/etc/loki/config.yml"]
+    restart: unless-stopped
+    stop_grace_period: 60s
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    cpus: "0.50"
+    mem_limit: 768m
+    environment:
+      GOMEMLIMIT: 600MiB
+    ports:
+      - "127.0.0.1:3100:3100"
+    volumes:
+      - ./loki.yml:/etc/loki/config.yml:ro
+      - loki-data:/loki
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    networks: [logging]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  alloy:
+    image: grafana/alloy:v1.21.3
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - --disable-reporting
+      - /etc/alloy/config.alloy
+    # Docker API access is privileged even with a read-only socket mount.
+    # Only this trusted collector gets the socket. Neither port is public.
+    user: "0:0"
+    restart: unless-stopped
+    stop_grace_period: 30s
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    cpus: "0.25"
+    mem_limit: 384m
+    environment:
+      GOMEMLIMIT: 300MiB
+    depends_on: [loki]
+    ports:
+      - "127.0.0.1:12345:12345"
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy-data:/var/lib/alloy/data
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    networks: [logging]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  logging:
+    internal: true
+
+# Fixed names prevent directory/project-name changes from creating a new archive.
+volumes:
+  loki-data:
+    name: jd-logging-loki-data
+  alloy-data:
+    name: jd-logging-alloy-data

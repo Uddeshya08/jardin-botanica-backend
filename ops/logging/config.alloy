@@ -1,0 +1,50 @@
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+discovery.docker "backend" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "5s"
+
+  filter {
+    name   = "label"
+    values = ["com.docker.swarm.service.name=jd-backend_api"]
+  }
+}
+
+discovery.relabel "backend" {
+  targets = []
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_swarm_service_name"]
+    target_label  = "service"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_log_stream"]
+    target_label  = "stream"
+  }
+}
+
+// Docker timestamps (UTC), not collection time, are used by this source.
+// Keep the component name and persistent storage path stable across upgrades.
+loki.source.docker "backend" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.docker.backend.targets
+  labels        = { job = "docker", environment = "production" }
+  relabel_rules = discovery.relabel.backend.rules
+  forward_to    = [loki.write.archive.receiver]
+}
+
+loki.write "archive" {
+  endpoint {
+    url                 = "http://loki:3100/loki/api/v1/push"
+    max_backoff_retries = 0
+    max_backoff_period  = "30s"
+  }
+}

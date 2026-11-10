@@ -1,0 +1,72 @@
+name: Validate persistent logging
+
+on:
+  pull_request:
+    paths: ["ops/logging/**", ".github/workflows/logging.yml"]
+  push:
+    branches: [main]
+    paths: ["ops/logging/**", ".github/workflows/logging.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  logging:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22.x"
+      - name: Check time conversion and paginated exports
+        run: node ops/logging/export-logs.test.mjs
+      - name: Validate host boot service
+        run: systemd-analyze verify ops/logging/jd-logging.service
+      - name: Validate Compose and both component configurations
+        run: |
+          docker compose -f ops/logging/compose.yml config --quiet
+          docker compose -f ops/logging/compose.yml run --rm --no-deps loki -config.file=/etc/loki/config.yml -verify-config=true
+          docker compose -f ops/logging/compose.yml run --rm --no-deps alloy validate /etc/alloy/config.alloy
+      - name: Verify collection, export and storage across restarts
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose -f ops/logging/compose.yml up -d
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3100/ready; then break; fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:3100/ready
+          marker="jd-logging-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          start=$(date -u -d '1 minute ago' +%Y-%m-%dT%H:%M:%SZ)
+          docker run -d --name jd-logging-probe \
+            --label com.docker.swarm.service.name=jd-backend_api \
+            alpine:3.22 /bin/sh -c 'echo "$1"; sleep 120' sh "$marker"
+          export_window() {
+            node ops/logging/export-logs.mjs --start "$start" \
+              --end "$(date -u -d '1 minute' +%Y-%m-%dT%H:%M:%SZ)" \
+              --contains "$marker" --require-results > "$RUNNER_TEMP/logging-probe.log"
+          }
+          for attempt in $(seq 1 30); do
+            if export_window; then break; fi
+            sleep 2
+          done
+          grep -F "$marker" "$RUNNER_TEMP/logging-probe.log"
+          # Remove the source so a successful post-restart query proves that
+          # Loki retained the entry, rather than Alloy simply reading it again.
+          docker rm -f jd-logging-probe
+          docker compose -f ops/logging/compose.yml restart
+          for attempt in $(seq 1 60); do
+            if export_window; then break; fi
+            sleep 2
+          done
+          grep -F "$marker" "$RUNNER_TEMP/logging-probe.log"
+      - name: Show diagnostics
+        if: failure()
+        run: docker compose -f ops/logging/compose.yml logs --tail 100
+      - name: Clean up isolated CI containers and volumes
+        if: always()
+        run: |
+          docker rm -f jd-logging-probe || true
+          docker compose -f ops/logging/compose.yml down -v
