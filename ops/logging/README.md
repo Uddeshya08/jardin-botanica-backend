@@ -197,6 +197,91 @@ readiness, then query the same probe with the same time range again.
 
 ## Search and export an incident
 
+### Browse readable daily files
+
+Loki stores internal index/chunk files, not daily text files. The optional daily
+export timer creates the readable copies requested for direct server browsing:
+
+```text
+/var/log/jd-backend/
+  2026-11-10-IST.log
+  2026-11-11-IST.log
+```
+
+Filenames use Indian calendar days, each beginning at midnight IST. Individual
+lines retain the original UTC timestamps, as in Docker logs. Only days with
+available entries appear; missing history is not represented by empty files.
+
+To add this on a server where Loki/Alloy are already working, run from a checkout
+containing these files:
+
+```bash
+sudo install -d -m 0700 /var/log/jd-backend
+sudo install -m 0644 ops/logging/archive-daily-logs.mjs /opt/jd-logging/
+sudo install -m 0644 ops/logging/jd-logging-daily.service \
+  ops/logging/jd-logging-daily.timer /etc/systemd/system/
+sudo docker pull node:22-alpine
+sudo systemd-analyze verify /etc/systemd/system/jd-logging.service \
+  /etc/systemd/system/jd-logging-daily.service /etc/systemd/system/jd-logging-daily.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now jd-logging-daily.timer
+sudo systemctl start jd-logging-daily.service
+sudo systemctl status jd-logging-daily.service --no-pager
+sudo systemctl list-timers jd-logging-daily.timer
+```
+
+The initial export may take a few minutes while it reads up to eight dates. The
+job does not restart the backend or the logging collectors. It runs a temporary,
+resource-limited Node container, has no Docker socket mounted inside that
+container, and queries only the loopback Loki API. The host's systemd unit has
+the Docker access needed to launch it. Node's image is pulled during installation
+and boot never attempts an image download.
+
+As root, browse the files directly:
+
+```bash
+cd /var/log/jd-backend
+ls -lh
+less 2026-11-11-IST.log
+grep -nEi -C 5 'razorpay|error|cart_YOUR_ID|pay_YOUR_ID' 2026-11-11-IST.log
+```
+
+Refreshes run every 15 minutes, so the current file can lag live activity by
+that interval plus export runtime. For continuous live logs, use `docker service
+logs --follow --tail 100 jd-backend_api`. `tail -F` follows a daily file across
+atomic replacements; `tail -f` can stay attached to its old inode.
+
+The first export backfills today's IST date plus the previous seven dates. Later
+runs refresh today/yesterday, and catch up across all eight dates after a missed
+period or if explicitly requested. This supports one full week of readable
+history once sufficient logs have been collected. An older file is removed only
+after all queries in a refresh succeed. Unrelated filenames are left alone.
+Failed or empty exports do not erase an existing daily copy, and partially
+written files are never substituted for complete files.
+
+Normal refreshes allow next-day ingestion corrections. For unusually delayed
+entries older than yesterday, regenerate all retained dates explicitly:
+
+```bash
+sudo docker run --rm --pull=never --network host \
+  --mount type=bind,source=/opt/jd-logging,target=/tools,readonly \
+  --mount type=bind,source=/var/log/jd-backend,target=/logs \
+  node:22-alpine node /tools/archive-daily-logs.mjs --directory /logs --backfill
+```
+
+Stop the timer and wait for any active `jd-logging-daily.service` run to finish
+before this manual backfill; re-enable the timer afterward. Both the date grouping
+and the eight-date deletion policy apply to these daily copies independently of
+Loki's rolling 192-hour retention. Keep unrelated investigation files elsewhere.
+
+For a failed scheduled export, inspect
+`sudo journalctl -u jd-logging-daily.service --since today --no-pager`. Check disk
+usage with `sudo du -sh /var/log/jd-backend`. Daily copies consume additional
+uncompressed disk space and contain the same sensitive data as the source logs;
+the directory is root-only and new files have mode `0600`.
+
+### Export a custom time window
+
 Always provide a timezone. The command accepts either `Z` for UTC or `+05:30` for
 IST, preserves the original nanosecond UTC log timestamp, and paginates results.
 The start time is inclusive and the end time is exclusive. All stdout is log
@@ -282,7 +367,8 @@ deleted by Loki. Apply your incident-record policy to those files separately.
 node ops/logging/export-logs.test.mjs
 ```
 
-The dedicated GitHub workflow validates Compose, checks both pinned binaries'
+The daily archive tests also cover Indian calendar boundaries, file replacement,
+failed/empty exports, and retention cleanup. The dedicated GitHub workflow validates Compose, checks both pinned binaries'
 configuration parsers, and tests collection plus persistence after removing the
 source container and restarting the logging project. It does not deploy logging
 to production. The eight-day expiry is verified as configuration; the smoke test

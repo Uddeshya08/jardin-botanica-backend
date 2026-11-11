@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh readable backend log files every fifteen minutes
+
+[Timer]
+OnCalendar=*:0/15
+OnBootSec=3min
+Persistent=true
+Unit=jd-logging-daily.service
+
+[Install]
+WantedBy=timers.target

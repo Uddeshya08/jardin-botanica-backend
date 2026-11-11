@@ -20,9 +20,11 @@ jobs:
         with:
           node-version: "22.x"
       - name: Check time conversion and paginated exports
-        run: node ops/logging/export-logs.test.mjs
+        run: |
+          node ops/logging/export-logs.test.mjs
+          node ops/logging/archive-daily-logs.test.mjs
       - name: Validate host boot service
-        run: systemd-analyze verify ops/logging/jd-logging.service
+        run: systemd-analyze verify ops/logging/jd-logging.service ops/logging/jd-logging-daily.service ops/logging/jd-logging-daily.timer
       - name: Validate Compose and both component configurations
         run: |
           docker compose -f ops/logging/compose.yml config --quiet
@@ -53,6 +55,10 @@ jobs:
             sleep 2
           done
           grep -F "$marker" "$RUNNER_TEMP/logging-probe.log"
+          node ops/logging/archive-daily-logs.mjs --directory "$RUNNER_TEMP/daily-logs"
+          grep -F "$marker" "$RUNNER_TEMP/daily-logs/"*.log
+          node ops/logging/archive-daily-logs.mjs --directory "$RUNNER_TEMP/daily-logs"
+          test "$(grep -F -h "$marker" "$RUNNER_TEMP/daily-logs/"*.log | wc -l)" -eq 1
           # Remove the source so a successful post-restart query proves that
           # Loki retained the entry, rather than Alloy simply reading it again.
           docker rm -f jd-logging-probe

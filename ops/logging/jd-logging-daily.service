@@ -1,0 +1,12 @@
+[Unit]
+Description=Export backend logs to readable daily IST files
+Requires=docker.service jd-logging.service
+After=docker.service jd-logging.service
+RequiresMountsFor=/opt/jd-logging /var/log/jd-backend
+
+[Service]
+Type=oneshot
+UMask=0077
+ExecStartPre=/usr/bin/curl --fail --silent --show-error --retry 30 --retry-delay 2 --retry-all-errors --max-time 3 http://127.0.0.1:3100/ready
+ExecStart=/usr/bin/docker run --rm --pull=never --network host --read-only --cap-drop=ALL --security-opt=no-new-privileges:true --memory=256m --cpus=0.25 --mount type=bind,source=/opt/jd-logging,target=/tools,readonly --mount type=bind,source=/var/log/jd-backend,target=/logs node:22-alpine node /tools/archive-daily-logs.mjs --directory /logs
+TimeoutStartSec=900
