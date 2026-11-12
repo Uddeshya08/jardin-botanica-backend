@@ -41,6 +41,20 @@ describe("Meta CAPI payload and client", () => {
     expect(buildMetaPurchase({ ...order(), metadata: { meta_capi_consent: false } }, config)).toEqual({ state: "skipped", reason: "marketing_tracking_declined" });
   });
 
+  it("forwards valid browser identifiers unchanged and omits malformed values", () => {
+    const fbp = "fb.1.1760000000000.123456789";
+    const fbc = "fb.2.1760000000000.CaseSensitive-Click";
+    const input = { ...order(), metadata: { meta_fbp: fbp, meta_fbc: fbc } };
+    const result = buildMetaPurchase(input, config);
+    expect(result).toMatchObject({ state: "ready", event: { user_data: { fbp, fbc } } });
+    const malformed = buildMetaPurchase({ ...input, metadata: { meta_fbp: {}, meta_fbc: "invalid" } }, config);
+    expect(malformed.state).toBe("ready");
+    if (malformed.state === "ready") {
+      expect(malformed.event.user_data).not.toHaveProperty("fbp");
+      expect(malformed.event.user_data).not.toHaveProperty("fbc");
+    }
+  });
+
   it("waits for full capture, including every payment collection", () => {
     const value = order();
     value.payment_collections![0].status = "authorized";

@@ -1,3 +1,4 @@
+import { metaBrowserIdentifiers } from "./meta-browser-identifiers";
 import { timingSafeEqual } from "node:crypto";
 import { isIP } from "node:net";
 import { z } from "zod";
@@ -38,8 +39,8 @@ export const metaBrowserInput = z.object({
   user_data: z.object({
     client_user_agent: z.string().min(1).max(1024),
     client_ip_address: z.string().max(64).optional(),
-    fbp: z.string().regex(/^fb\.\d+\.\d{13}\.\d+$/).max(256).optional(),
-    fbc: z.string().regex(/^fb\.\d+\.\d{13}\.[a-zA-Z0-9_.-]+$/).max(512).optional(),
+    fbp: z.unknown().optional(),
+    fbc: z.unknown().optional(),
   }),
 });
 
@@ -57,11 +58,11 @@ export function buildMetaBrowserEvent(input: unknown, config: MetaConfig): MetaE
   }
   // Avoid transmitting arbitrary query strings, fragments or URL credentials.
   source.search = ""; source.hash = ""; source.username = ""; source.password = "";
-  const { client_ip_address: ip, ...userData } = data.user_data;
+  const { client_ip_address: ip, fbp, fbc, ...userData } = data.user_data;
   return {
     event_name: data.event_name, event_id: data.event_id, event_time: Math.min(data.event_time, now),
     action_source: "website", event_source_url: source.href,
-    user_data: { ...userData, ...(ip && isIP(ip) ? { client_ip_address: ip } : {}) },
+    user_data: { ...userData, ...metaBrowserIdentifiers(fbp, fbc), ...(ip && isIP(ip) ? { client_ip_address: ip } : {}) },
     ...(data.custom_data ? { custom_data: data.custom_data } : {}),
   };
 }

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { metaBrowserIdentifiers } from "./meta-browser-identifiers";
 import { normalizeMetaMatchValue } from "./meta-match-data";
 
 type MetaAddress = {
@@ -119,7 +120,9 @@ export function buildMetaPurchase(order: MetaOrder, config: MetaConfig): Purchas
   if (!Number.isFinite(eventTime) || eventTime > now || eventTime < now - 86400) {
     return { state: "skipped", reason: "purchase_outside_24_hour_delivery_window" };
   }
-  const userData: Record<string, string[]> = {};
+  const userData: MetaEvent["user_data"] = metaBrowserIdentifiers(
+    order.metadata?.meta_fbp, order.metadata?.meta_fbc,
+  );
   const email = order.email?.trim().toLowerCase();
   if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) userData.em = [hashMetaValue(email)];
   // Only add a country prefix when it is unambiguous for this India storefront.
