@@ -143,10 +143,11 @@ export class DelhiveryApiClient {
   /**
    * Track shipment by waybill
    */
-  async trackShipment(waybill: string): Promise<any> {
+  async trackShipment(waybill: string, timeout?: number): Promise<any> {
     try {
       const response = await this.apiClient.get("/api/v1/packages/json/", {
         params: { waybill: waybill },
+        ...(timeout ? { timeout } : {}),
       });
 
       return response.data;
