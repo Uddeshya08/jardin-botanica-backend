@@ -56,6 +56,19 @@ export default async function handleOrderPlaced({
       }
     }
 
+    // Confirm every placed order even if the courier cannot create its shipment.
+    // Separate per-recipient idempotency keys protect email retries within Resend's window.
+    try {
+      await sendOrderConfirmationEmail(order);
+      console.log("Order confirmation emails accepted for order:", orderId);
+    } catch (emailError) {
+      console.error("Error sending order confirmation email:", {
+        order_id: orderId,
+        error: emailError.message,
+      });
+      // Email delivery failure must not prevent fulfillment.
+    }
+
     // Build items to fulfill
     const itemsToFulfill = order.items.filter((item): item is NonNullable<typeof item> => item !== null).map((item) => ({
       id: item.id,
@@ -79,18 +92,6 @@ export default async function handleOrderPlaced({
       fulfillment_id: result.id,
       order_id: orderId,
     });
-
-    // Send order confirmation email
-    try {
-      await sendOrderConfirmationEmail(order);
-      console.log("Order confirmation email sent successfully for order:", orderId);
-    } catch (emailError) {
-      console.error("Error sending order confirmation email:", {
-        order_id: orderId,
-        error: emailError.message,
-      });
-      // Don't throw - we don't want email failures to mark the fulfillment as failed
-    }
 
     return {
       success: true,

@@ -4,109 +4,47 @@ import { renderOrderConfirmationEmail, type ConfirmationOrder } from "./order-co
 import { ORDER_CONFIRMATION_LOGO_BASE64 } from "./order-confirmation-logo";
 
 /**
- * Get recipient emails based on mode (test/production)
- */
-function getRecipientEmails(customerEmail: string | undefined, testEmail: string, isTestMode: boolean): string[] {
-  if (isTestMode) {
-    // In test mode, only send to test email (Resend restriction)
-    return [testEmail];
-  } else {
-    // In production mode (custom domain), send to both customer and test email
-    return customerEmail 
-      ? [customerEmail, testEmail]
-      : [testEmail];
-  }
-}
-
-/**
- * Send order confirmation email to customer
- * @param order - Order data object
+ * Send separate customer and merchant confirmations. Neither message shares recipients.
  */
 export async function sendOrderConfirmationEmail(order: ConfirmationOrder): Promise<void> {
-  try {
-    // Get customer email from order
-    const customerEmail = order.email || undefined;
-    
-    // Test email for testing purposes
-    const testEmail = "onboarding@resend.dev";
-    const fromEmail = process.env.RESEND_FROM_EMAIL || 'hello@jardinbotanica.com';
-    
-    // Check if we're using test mode (onboarding@resend.dev)
-    // In test mode, Resend only allows sending to your own email
-    const isTestMode = fromEmail === 'onboarding@resend.dev';
-    
-    // Get recipient emails based on mode
-    const recipientEmails = getRecipientEmails(customerEmail, testEmail, isTestMode);
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) throw new Error("RESEND_API_KEY is not set - cannot send order confirmation email");
+  const from = process.env.RESEND_FROM_EMAIL || "hello@jardinbotanica.com";
+  const customerEmail = order.email?.trim();
+  const reference = getOrderReference(order) || order.id;
+  const html = renderOrderConfirmationEmail(order);
+  const resend = new Resend(apiKey);
+  const recipients = [
+    ...(customerEmail ? [{ role: "customer", email: customerEmail, subject: "Order Confirmation - " + reference }] : []),
+    { role: "merchant", email: "hello@jardinbotanica.com", subject: "New Order - " + reference },
+  ];
+  if (!customerEmail) console.warn("Customer confirmation skipped: order has no email", { order_id: order.id });
 
-    if (isTestMode) {
-      console.log('⚠️  Test mode detected - only sending to test email due to Resend restrictions');
-      if (customerEmail && customerEmail !== testEmail) {
-        console.log(`ℹ️  Customer email (${customerEmail}) will be skipped in test mode`);
-      }
-    }
-
-    if (!customerEmail) {
-      console.warn(`No customer email found for order ${order.id}, sending to test email only`);
-    }
-
-    // Initialize Resend client
-    const resendApiKey = process.env.RESEND_API_KEY;
-    if (!resendApiKey) throw new Error("RESEND_API_KEY is not set - cannot send order confirmation email");
-    
-    console.log('📧 Preparing to send order confirmation email...');
-    console.log('From:', fromEmail);
-    console.log('To:', recipientEmails);
-    console.log('Order ID:', order.id);
-    console.log('Mode:', isTestMode ? 'TEST MODE (Resend restrictions apply)' : 'PRODUCTION MODE');
-    
-    const resend = new Resend(resendApiKey);
-
-    // Generate email HTML
-    const emailHtml = renderOrderConfirmationEmail(order);
-
-    // Send email
-    const emailResult = await resend.emails.send({
-      from: fromEmail,
-      to: recipientEmails,
-      subject: `Order Confirmation - ${getOrderReference(order) || order.id}`,
-      html: emailHtml,
+  // Attempt both independently, so one rejected recipient cannot suppress the other.
+  const results = await Promise.allSettled(recipients.map(async (recipient) => {
+    const result = await resend.emails.send({
+      from,
+      to: [recipient.email],
+      subject: recipient.subject,
+      html,
       attachments: [{
         filename: "Jardin_Botanica_Wordmark_Ink.png",
         content: Buffer.from(ORDER_CONFIRMATION_LOGO_BASE64, "base64"),
         contentType: "image/png",
         contentId: "jardin-wordmark",
       }],
+    }, { idempotencyKey: "order-confirmation/" + order.id + "/" + recipient.role });
+    if (result.error || !result.data?.id) {
+      throw new Error("Order confirmation was not accepted for " + recipient.role);
+    }
+    console.log("Order confirmation accepted by Resend", {
+      order_id: order.id, recipient_role: recipient.role, email_id: result.data.id,
     });
-
-    // Log detailed response
-    console.log('📬 Email API Response:', JSON.stringify(emailResult, null, 2));
-    
-    if (emailResult.error) {
-      console.error('❌ Resend API Error:', emailResult.error);
-      
-      // If it's a validation error about test mode, log it but don't throw
-      const error = emailResult.error as any;
-      if (error.statusCode === 403 && error.message?.includes('testing emails')) {
-        console.warn('⚠️  Resend test mode restriction: Only your own email can receive emails in test mode');
-        console.warn('💡 Solution: Verify a domain at resend.com/domains to send to all recipients');
-        return;
-      }
-      
-      throw new Error(`Failed to send email: ${JSON.stringify(emailResult.error)}`);
-    }
-    
-    if (emailResult.data) {
-      console.log('✅ Email sent successfully!');
-      console.log('Email ID:', emailResult.data.id);
-      console.log('Recipients:', recipientEmails.join(', '));
-      console.log(`✅ Order confirmation email sent to ${recipientEmails.join(', ')} for order ${order.id}`);
-    } else {
-      console.warn('⚠️ Unexpected response from Resend API:', emailResult);
-    }
-  } catch (error: any) {
-    console.error("❌ Error sending order confirmation email:");
-    console.error("Error message:", error?.message || error);
-    throw error;
+  }));
+  const failedRoles = results.flatMap((result, index) => result.status === "rejected" ? [recipients[index].role] : []);
+  if (failedRoles.length) {
+    console.error("Order confirmation delivery attempt failed", { order_id: order.id, recipient_roles: failedRoles });
+    throw new Error("Order confirmation failed for: " + failedRoles.join(", "));
   }
 }
 

@@ -135,6 +135,17 @@ describe("dispatch-note order confirmation template", () => {
       const payload = client.emails.send.mock.calls[0][0]
       expect(payload.html).toBe(renderOrderConfirmationEmail(order))
       expect(payload.to).toContain(order.email)
+      expect(client.emails.send).toHaveBeenCalledTimes(2)
+      expect(payload.to).toEqual([order.email])
+      const merchantPayload = client.emails.send.mock.calls[1][0]
+      expect(merchantPayload.to).toEqual(["hello@jardinbotanica.com"])
+      expect(merchantPayload.subject).toBe("New Order - JB-26004831")
+      expect(merchantPayload.html).toBe(payload.html)
+      for (const [message] of client.emails.send.mock.calls) {
+        expect(message.cc).toBeUndefined()
+        expect(message.bcc).toBeUndefined()
+        expect(message.to).not.toContain("onboarding@resend.dev")
+      }
       expect(payload.subject).toBe("Order Confirmation - JB-26004831")
       expect(payload.attachments[0].contentId).toBe("jardin-wordmark")
       expect(payload.attachments[0].content.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a")
@@ -145,5 +156,73 @@ describe("dispatch-note order confirmation template", () => {
       else process.env.RESEND_FROM_EMAIL = previousFrom
       log.mockRestore()
     }
+  })
+})
+
+describe("separate order confirmation delivery", () => {
+  const env = { ...process.env }
+  beforeEach(() => {
+    process.env.RESEND_API_KEY = "mock-key"
+    process.env.RESEND_FROM_EMAIL = "hello@jardinbotanica.com"
+    jest.spyOn(console, "log").mockImplementation(() => {})
+    jest.spyOn(console, "warn").mockImplementation(() => {})
+    jest.spyOn(console, "error").mockImplementation(() => {})
+  })
+  afterEach(() => { process.env = { ...env }; jest.restoreAllMocks() })
+
+  function nextClient(send: jest.Mock) {
+    (Resend as jest.Mock).mockImplementationOnce(() => ({ emails: { send } }))
+  }
+
+  it("attempts merchant delivery even when customer send throws", async () => {
+    const send = jest.fn().mockRejectedValueOnce(new Error("network error"))
+      .mockResolvedValueOnce({ data: { id: "merchant_email" } })
+    nextClient(send)
+    await expect(sendOrderConfirmationEmail(order)).rejects.toThrow("failed for: customer")
+    expect(send).toHaveBeenCalledTimes(2)
+    expect(send.mock.calls[1][0].to).toEqual(["hello@jardinbotanica.com"])
+  })
+
+  it("does not hide merchant failure after customer succeeds", async () => {
+    const send = jest.fn().mockResolvedValueOnce({ data: { id: "customer_email" } })
+      .mockResolvedValueOnce({ error: { name: "validation_error", message: "rejected" } })
+    nextClient(send)
+    await expect(sendOrderConfirmationEmail(order)).rejects.toThrow("failed for: merchant")
+    expect(send.mock.calls[0][0].to).toEqual([order.email])
+  })
+
+  it("still sends a merchant notification when customer email is absent", async () => {
+    const send = jest.fn().mockResolvedValue({ data: { id: "merchant_email" } })
+    nextClient(send)
+    await sendOrderConfirmationEmail({ ...order, email: undefined })
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(send.mock.calls[0][0].to).toEqual(["hello@jardinbotanica.com"])
+  })
+
+  it("uses distinct stable keys per order and recipient role for retries", async () => {
+    const send = jest.fn().mockResolvedValue({ data: { id: "receipt" } })
+    nextClient(send)
+    await sendOrderConfirmationEmail(order)
+    nextClient(send)
+    await sendOrderConfirmationEmail(order)
+    expect(send.mock.calls[0][1].idempotencyKey).toBe("order-confirmation/order_test/customer")
+    expect(send.mock.calls[1][1].idempotencyKey).toBe("order-confirmation/order_test/merchant")
+    expect(send.mock.calls[2][1]).toEqual(send.mock.calls[0][1])
+    expect(send.mock.calls[3][1]).toEqual(send.mock.calls[1][1])
+  })
+
+  it("reports missing provider receipt and test-sender restrictions as failures", async () => {
+    process.env.RESEND_FROM_EMAIL = "onboarding@resend.dev"
+    const send = jest.fn().mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({ error: { statusCode: 403, message: "testing emails" } })
+    nextClient(send)
+    await expect(sendOrderConfirmationEmail(order)).rejects.toThrow("failed for: customer, merchant")
+    expect(send.mock.calls[0][0].to).toEqual([order.email])
+    expect(send.mock.calls[1][0].to).toEqual(["hello@jardinbotanica.com"])
+  })
+
+  it("requires configured API credentials before sending", async () => {
+    delete process.env.RESEND_API_KEY
+    await expect(sendOrderConfirmationEmail(order)).rejects.toThrow("RESEND_API_KEY is not set")
   })
 })
