@@ -1,4 +1,5 @@
 import { metaBrowserIdentifiers } from "./meta-browser-identifiers";
+import { META_BROWSER_EVENT_NAMES } from "./meta-event-names";
 import { timingSafeEqual } from "node:crypto";
 import { isIP } from "node:net";
 import { z } from "zod";
@@ -31,11 +32,11 @@ const productData = z.object({
 
 export const metaBrowserInput = z.object({
   dataset_id: z.string().regex(/^\d+$/),
-  event_name: z.enum(["PageView", "ViewContent", "AddToCart"]),
-  event_id: z.string().regex(/^(pageview|viewcontent|addtocart)_[a-f0-9-]{36}$/),
+  event_name: z.enum(META_BROWSER_EVENT_NAMES),
+  event_id: z.string().regex(/^[a-z]+_[a-f0-9-]{36}$/),
   event_time: z.number().int(),
   event_source_url: z.string().url().max(2048),
-  custom_data: productData.optional(),
+  custom_data: z.unknown().optional(),
   user_data: z.object({
     client_user_agent: z.string().min(1).max(1024),
     client_ip_address: z.string().max(64).optional(),
@@ -52,8 +53,15 @@ export function buildMetaBrowserEvent(input: unknown, config: MetaConfig): MetaE
   if (data.event_time > now + 60 || data.event_time < now - 300) throw new MetaRequestError(false, "event_time_invalid");
   const source = new URL(data.event_source_url), store = new URL(config.storefrontUrl);
   if (source.origin !== store.origin) throw new MetaRequestError(false, "source_origin_invalid");
-  if (data.event_name !== "PageView" && !data.custom_data) throw new MetaRequestError(false, "product_data_missing");
-  if (data.custom_data && ((data.custom_data.value === undefined) !== (data.custom_data.currency === undefined))) {
+  // Validate each event's own payload. Do not accept arbitrary form or search text.
+  let customData: Record<string, unknown> | undefined;
+  if (["ViewContent", "AddToCart", "InitiateCheckout", "AddPaymentInfo"].includes(data.event_name)) {
+    if (!data.custom_data) throw new MetaRequestError(false, "product_data_missing");
+    customData = productData.parse(data.custom_data);
+  } else if (data.custom_data !== undefined) {
+    customData = z.object({}).strict().parse(data.custom_data);
+  }
+  if (customData && ((customData.value === undefined) !== (customData.currency === undefined))) {
     throw new MetaRequestError(false, "value_currency_mismatch");
   }
   // Avoid transmitting arbitrary query strings, fragments or URL credentials.
@@ -63,7 +71,7 @@ export function buildMetaBrowserEvent(input: unknown, config: MetaConfig): MetaE
     event_name: data.event_name, event_id: data.event_id, event_time: Math.min(data.event_time, now),
     action_source: "website", event_source_url: source.href,
     user_data: { ...userData, ...metaBrowserIdentifiers(fbp, fbc), ...(ip && isIP(ip) ? { client_ip_address: ip } : {}) },
-    ...(data.custom_data ? { custom_data: data.custom_data } : {}),
+    ...(customData ? { custom_data: customData } : {}),
   };
 }
 
@@ -77,7 +85,7 @@ export async function enqueueMetaBrowserEvent(container: MedusaContainer, input:
   if ((await service.listMetaBrowserEvents({ id })).length) return;
   try {
     await service.createMetaBrowserEvents({ id, dataset_id: config.datasetId,
-      event_id: event.event_id, event_name: event.event_name as "PageView" | "ViewContent" | "AddToCart",
+      event_id: event.event_id, event_name: event.event_name as typeof META_BROWSER_EVENT_NAMES[number],
       payload: event as unknown as Record<string, unknown>, next_attempt_at: new Date(),
       expires_at: new Date((event.event_time + 86400) * 1000) });
   } catch (error) {

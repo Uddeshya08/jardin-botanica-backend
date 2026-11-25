@@ -67,6 +67,32 @@ describe("Paired Meta browser events", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  it.each(["InitiateCheckout", "AddPaymentInfo"])("queues and deduplicates %s with browser identifiers", async (name) => {
+    const customData = name === "Lead" ? { content_name: "newsletter" }
+      : name === "CompleteRegistration" ? { content_name: "email", status: true }
+      : name === "Search" ? {} : input("AddToCart").custom_data;
+    const event = { ...input(), event_name: name, event_id: `${name.toLowerCase()}_${uuid}`, custom_data: customData,
+      user_data: { ...input().user_data, fbc: "fb.1.1760000000000.realClick" } };
+    await enqueueMetaBrowserEvent(container, event);
+    await enqueueMetaBrowserEvent(container, event);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].payload).toMatchObject({ event_name: name, event_id: event.event_id,
+      user_data: { fbp: input().user_data.fbp, fbc: "fb.1.1760000000000.realClick" } });
+    await processMetaBrowserEvents(container);
+    expect(rows[0].status).toBe("sent");
+  });
+
+  it("rejects invalid funnel payloads and arbitrary form/search information", () => {
+    const funnel = (name: string, custom_data: unknown) => ({ ...input(), event_name: name,
+      event_id: `${name.toLowerCase()}_${uuid}`, custom_data });
+    expect(() => buildMetaBrowserEvent(funnel("InitiateCheckout", undefined), config)).toThrow();
+    expect(() => buildMetaBrowserEvent(funnel("AddPaymentInfo", { ...input("AddToCart").custom_data, currency: undefined }), config)).toThrow();
+    expect(() => buildMetaBrowserEvent(funnel("Lead", { content_name: "newsletter", email: "private@example.com" }), config)).toThrow();
+    expect(() => buildMetaBrowserEvent(funnel("Search", { search_string: "private@example.com" }), config)).toThrow();
+    expect(() => buildMetaBrowserEvent(funnel("CompleteRegistration", { content_name: "email", status: false }), config)).toThrow();
+    expect(() => buildMetaBrowserEvent(funnel("CompleteRegistration", { content_name: "login", status: true }), config)).toThrow();
+  });
+
   it("deduplicates relay requests and retains event identity across a timeout retry", async () => {
     await enqueueMetaBrowserEvent(container, input());
     await enqueueMetaBrowserEvent(container, input());
