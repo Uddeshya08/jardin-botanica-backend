@@ -1,8 +1,7 @@
 diff --git a/node_modules/medusa-plugin-razorpay-v2/.medusa/server/src/providers/payment-razorpay/src/core/razorpay-base.js b/node_modules/medusa-plugin-razorpay-v2/.medusa/server/src/providers/payment-razorpay/src/core/razorpay-base.js
-index b1830e9..08180fd 100644
 --- a/node_modules/medusa-plugin-razorpay-v2/.medusa/server/src/providers/payment-razorpay/src/core/razorpay-base.js
 +++ b/node_modules/medusa-plugin-razorpay-v2/.medusa/server/src/providers/payment-razorpay/src/core/razorpay-base.js
-@@ -7,6 +7,21 @@ const utils_1 = require("@medusajs/framework/utils");
+@@ -7,6 +7,21 @@
  const razorpay_1 = __importDefault(require("razorpay"));
  const get_smallest_unit_1 = require("../utils/get-smallest-unit");
  const update_razorpay_customer_metadata_1 = require("../workflows/update-razorpay-customer-metadata");
@@ -24,20 +23,183 @@ index b1830e9..08180fd 100644
  class RazorpayBase extends utils_1.AbstractPaymentProvider {
      constructor(container, options) {
          super(container, options);
-@@ -184,11 +199,22 @@ class RazorpayBase extends utils_1.AbstractPaymentProvider {
+@@ -57,48 +72,53 @@
+     }
+     async capturePayment(input) {
+         const { razorpayOrder, paymentSession } = await this.getPaymentSessionAndOrderFromInput(input);
+-        const paymentsResponse = await this.razorpay_.orders.fetchPayments(razorpayOrder.id);
+-        const possibleCaptures = paymentsResponse.items?.filter((item) => item.status == "authorized");
+-        const result = possibleCaptures?.map(async (payment) => {
+-            const { id, amount, currency } = payment;
+-            const toPay = (0, get_smallest_unit_1.getAmountFromSmallestUnit)(Math.round(parseInt(amount.toString())), currency.toUpperCase()) * 100;
+-            const paymentCaptured = await this.razorpay_.payments.capture(id, toPay, currency);
+-            return paymentCaptured;
+-        });
+-        if (result) {
+-            const payments = await Promise.all(result);
+-            const res = payments.reduce((acc, curr) => ((acc[curr.id] = curr), acc), {});
+-            // (paymentSessionData as unknown as Orders.RazorpayOrder).payments =
+-            //     res;
+-            const syncResult = await this.syncPaymentSession(paymentSession.id, razorpayOrder.id);
+-            const returrnedResult = {
+-                data: {
+-                    razorpayOrder: syncResult.razorpayOrder
+-                }
+-            };
+-            return returrnedResult;
++        const response = await this.razorpay_.orders.fetchPayments(razorpayOrder.id);
++        const payments = response.items || [];
++        const matches = (payment) => payment.order_id === razorpayOrder.id &&
++            payment.currency === razorpayOrder.currency && Number(payment.amount) === Number(razorpayOrder.amount);
++        const captured = payments.filter((payment) => matches(payment) && payment.status === "captured" &&
++            payment.captured === true && Number(payment.amount_refunded || 0) === 0);
++        if (captured.length === 1 && razorpayOrder.status === "paid" && Number(razorpayOrder.amount_paid) === Number(razorpayOrder.amount)) {
++            return { data: { razorpayOrder, medusa_payment_session_id: paymentSession.id } };
+         }
+-        else {
+-            throw new utils_1.MedusaError(utils_1.MedusaError.Types.NOT_FOUND, `No payments found for order ${razorpayOrder.id}`);
++        // Never capture a second attempt on an order with captured/refunded funds.
++        if (payments.some((payment) => payment.status === "captured" || payment.status === "refunded" || Number(payment.amount_refunded || 0) > 0)) {
++            throw new Error("Razorpay order requires captured/refunded payment reconciliation");
+         }
++        const authorized = payments.filter((payment) => matches(payment) && payment.status === "authorized");
++        if (authorized.length !== 1) throw new Error("Razorpay order has no unique full authorized payment");
++        const payment = authorized[0];
++        try {
++            await this.razorpay_.payments.capture(payment.id, Number(payment.amount), payment.currency);
++        } catch (error) {
++            // A concurrent provider auto-capture can win; verify instead of capturing again.
++            const latest = await this.razorpay_.payments.fetch(payment.id);
++            if (!matches(latest) || latest.status !== "captured" || latest.captured !== true || Number(latest.amount_refunded || 0) !== 0) throw error;
++        }
++        const latestOrder = await this.razorpay_.orders.fetch(razorpayOrder.id);
++        if (latestOrder.status !== "paid" || Number(latestOrder.amount_paid) !== Number(latestOrder.amount)) {
++            throw new Error("Razorpay order capture is not complete");
++        }
++        return { data: { razorpayOrder: latestOrder, medusa_payment_session_id: paymentSession.id } };
+     }
+     async authorizePayment(input) {
+         const { razorpayOrder, paymentSession } = await this.getPaymentSessionAndOrderFromInput(input);
+-        const paymentStatusRequest = {
+-            ...input
+-        };
+-        const status = await this.getPaymentStatus(paymentStatusRequest);
+-        const result = await this.syncPaymentSession(paymentSession.id, razorpayOrder.id);
+-        if (status.status == utils_1.PaymentSessionStatus.AUTHORIZED &&
+-            this.options_.auto_capture) {
+-            status.status = utils_1.PaymentSessionStatus.CAPTURED;
++        const response = await this.razorpay_.orders.fetchPayments(razorpayOrder.id);
++        const payments = response.items || [];
++        if (payments.some((payment) => payment.status === "refunded" || Number(payment.amount_refunded || 0) > 0)) {
++            throw new Error("Refunded Razorpay order requires manual reconciliation");
+         }
+-        return {
+-            data: {
+-                razorpayOrder: result.razorpayOrder
+-            },
+-            status: status.status
+-        };
++        const matches = payments.filter((payment) => payment.order_id === razorpayOrder.id &&
++            payment.currency === razorpayOrder.currency && Number(payment.amount) === Number(razorpayOrder.amount));
++        const captured = matches.filter((payment) => payment.status === "captured" && payment.captured === true);
++        const authorized = matches.filter((payment) => payment.status === "authorized");
++        let status = utils_1.PaymentSessionStatus.REQUIRES_MORE;
++        if (captured.length === 1 && razorpayOrder.status === "paid" && Number(razorpayOrder.amount_paid) === Number(razorpayOrder.amount)) {
++            status = utils_1.PaymentSessionStatus.CAPTURED;
++        } else if (captured.length === 0 && authorized.length === 1) {
++            status = utils_1.PaymentSessionStatus.AUTHORIZED;
++        }
++        return { data: { razorpayOrder, medusa_payment_session_id: paymentSession.id }, status };
+     }
+     async cancelPayment(input) {
+         const { razorpayOrder, paymentSession } = await this.getPaymentSessionAndOrderFromInput(input);
+@@ -127,35 +147,46 @@
+             }
+         };
+     }
+-    async getPaymentSessionAndOrderFromInput(input) {
+-        let { data, context } = input;
+-        if (!data?.razorpayorder) {
+-            if (data && data?.id) {
+-                data = {
+-                    ...data,
+-                    razorpayOrder: await this.razorpay_.orders.fetch(data.id)
+-                };
+-            }
++    async resolveVerifiedPaymentSession(order, candidateId) {
++        if (!/^order_[a-zA-Z0-9]+$/.test(order?.id || "")) {
++            throw new Error("Razorpay order reference is missing or invalid");
+         }
+-        let { razorpayOrder } = data;
+-        const paymentSessionId = razorpayOrder?.notes
+-            ?.medusa_payment_session_id ?? context?.idempotency_key;
+-        const paymentSession = await this.paymentService.retrievePaymentSession(paymentSessionId);
+-        if (!razorpayOrder) {
+-            razorpayOrder = paymentSession?.data
+-                ?.razorpayOrder;
++        const hints = [candidateId, order.notes?.medusa_payment_session_id, order.notes?.session_id]
++            .filter((id) => typeof id === "string" && /^payses_[a-zA-Z0-9]+$/.test(id));
++        let session;
++        if (hints.length) {
++            if (new Set(hints).size !== 1) throw new Error("Conflicting Razorpay payment session references");
++            session = await this.paymentService.retrievePaymentSession(hints[0]);
++        } else {
++            // Legacy orders have no notes. Use an exact JSON lookup, never an empty filter.
++            const matches = await this.paymentService.listPaymentSessions({
++                provider_id: "pp_razorpay_razorpay",
++                data: { razorpayOrder: { id: order.id } }
++            }, { take: 2 });
++            if (matches.length !== 1) throw new Error("Razorpay order has no unique Medusa payment session");
++            session = matches[0];
+         }
+-        if (razorpayOrder) {
+-            const razorpayOrder_latest = await this.razorpay_.orders.fetch(razorpayOrder.id);
+-            if (razorpayOrder_latest.status != razorpayOrder.status) {
+-                razorpayOrder = razorpayOrder_latest;
+-            }
++        const currency = String(order.currency || "").toUpperCase();
++        const major = (0, get_smallest_unit_1.getAmountFromSmallestUnit)(order.amount, currency);
++        if (!session || !/^payses_[a-zA-Z0-9]+$/.test(session.id) ||
++            session.provider_id !== "pp_razorpay_razorpay" || session.status === "canceled" ||
++            session.data?.razorpayOrder?.id !== order.id ||
++            String(session.currency_code).toUpperCase() !== currency ||
++            !Number.isFinite(major) || major <= 0 ||
++            Math.abs(Number(session.amount) - major) > 0.000001) {
++            throw new Error("Razorpay order does not match Medusa payment session");
+         }
+-        return {
+-            paymentSession,
+-            razorpayOrder: razorpayOrder
+-        };
++        return session;
+     }
++    async getPaymentSessionAndOrderFromInput(input) {
++        const data = input?.data || {};
++        const orderId = data.razorpayOrder?.id || (/^order_[a-zA-Z0-9]+$/.test(data.id || "") ? data.id : undefined);
++        if (!orderId) throw new Error("Missing Razorpay order for payment operation");
++        const razorpayOrder = await this.razorpay_.orders.fetch(orderId);
++        // Medusa passes capt_* during capture; only payses_* can be a session hint.
++        const paymentSession = await this.resolveVerifiedPaymentSession(razorpayOrder, input?.context?.idempotency_key);
++        return { razorpayOrder, paymentSession };
++    }
+     getRazorpayOrderCreateRequestBody(amount, currency_code) {
+         const intentRequest = {
+             amount: amount,
+@@ -184,11 +215,21 @@
      async initiatePayment(input) {
          const paymentSessionId = input.context?.idempotency_key;
          const { amount, currency_code } = input;
 -        let toPay = (0, get_smallest_unit_1.getAmountFromSmallestUnit)(Math.round(parseInt(amount.toString())), currency_code.toUpperCase());
-+        const parsedAmount = Math.round(parseInt(amount.toString(), 10));
-+        let toPay = (0, get_smallest_unit_1.getAmountFromSmallestUnit)(parsedAmount, currency_code.toUpperCase());
-         toPay =
-             currency_code.toUpperCase() == "INR" ? toPay * 100 * 100 : toPay;
-+        const normalizedAmount = Math.round(Number(toPay));
+-        toPay =
+-            currency_code.toUpperCase() == "INR" ? toPay * 100 * 100 : toPay;
++        const parsedAmount = Number(amount);
++        const normalizedAmount = (0, get_smallest_unit_1.getSmallestUnit)(parsedAmount, currency_code.toUpperCase());
 +        if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
 +            throw new utils_1.MedusaError(utils_1.MedusaError.Types.INVALID_DATA, `Invalid Razorpay order amount: ${normalizedAmount} for ${currency_code}`);
 +        }
++        if (!/^payses_[a-zA-Z0-9]+$/.test(paymentSessionId || "")) throw new Error("Missing Medusa payment session for Razorpay order creation");
 +        const razorpayOrderCreateRequest = this.getRazorpayOrderCreateRequestBody(normalizedAmount, currency_code);
++        razorpayOrderCreateRequest.notes = { medusa_payment_session_id: paymentSessionId, session_id: paymentSessionId };
 +        this.logger.info("Creating Razorpay order", {
 +            ...getPaymentLogContext(input?.context),
 +            original_amount: parsedAmount,
@@ -49,7 +211,7 @@ index b1830e9..08180fd 100644
              const razorpayOrder = await this.razorpay_.orders.create(razorpayOrderCreateRequest);
              return {
                  id: paymentSessionId,
-@@ -196,8 +222,15 @@ class RazorpayBase extends utils_1.AbstractPaymentProvider {
+@@ -196,8 +237,15 @@
              };
          }
          catch (error) {
@@ -67,7 +229,7 @@ index b1830e9..08180fd 100644
          }
      }
      async updateRazorpayOrderMetadata(orderId, metadata) {
-@@ -246,6 +279,18 @@ class RazorpayBase extends utils_1.AbstractPaymentProvider {
+@@ -246,6 +294,18 @@
      }
      async deletePayment(input) {
          try {
@@ -86,8 +248,96 @@ index b1830e9..08180fd 100644
              return await this.cancelPayment(input);
          }
          catch (e) {
-@@ -426,21 +471,66 @@ class RazorpayBase extends utils_1.AbstractPaymentProvider {
+@@ -366,81 +426,101 @@
+         };
+     }
+     async getWebhookActionAndData(webhookData) {
+-        const webhookSignature = webhookData.headers["x-razorpay-signature"];
+-        const webhookSecret = this.options_?.webhook_secret ||
+-            process.env.RAZORPAY_WEBHOOK_SECRET ||
+-            process.env.RAZORPAY_TEST_WEBHOOK_SECRET;
+-        const logger = this.logger;
+-        const data = webhookData.data;
+-        logger.info(`Received Razorpay webhook body as object : ${JSON.stringify(webhookData.data)}`);
++        const secret = this.options_?.webhook_secret || process.env.RAZORPAY_WEBHOOK_SECRET;
+         try {
+-            const validationResponse = razorpay_1.default.validateWebhookSignature(webhookData.rawData.toString(), webhookSignature, webhookSecret);
+-            // return if validation fails
+-            if (!validationResponse) {
+-                return { action: utils_1.PaymentActions.FAILED };
++            if (!secret || !razorpay_1.default.validateWebhookSignature(webhookData.rawData.toString(), webhookData.headers["x-razorpay-signature"], secret)) {
++                return { action: utils_1.PaymentActions.NOT_SUPPORTED };
+             }
++        } catch {
++            this.logger.warn("Razorpay webhook signature rejected");
++            return { action: utils_1.PaymentActions.NOT_SUPPORTED };
          }
+-        catch (error) {
+-            logger.error(`Razorpay webhook validation failed : ${error}`);
+-            return { action: utils_1.PaymentActions.FAILED };
++        const event = webhookData.data?.event;
++        if (!["payment.captured", "payment.authorized", "payment.failed"].includes(event)) return { action: utils_1.PaymentActions.NOT_SUPPORTED };
++        const snapshot = webhookData.data?.payload?.payment?.entity;
++        if (!/^pay_[a-zA-Z0-9]+$/.test(snapshot?.id || "") || !/^order_[a-zA-Z0-9]+$/.test(snapshot?.order_id || "")) {
++            throw new Error("Razorpay webhook payment reference is invalid");
+         }
+-        const paymentData = webhookData.data
+-            .payload?.payment?.entity;
+-        const event = data.event;
+-        const order = await this.razorpay_.orders.fetch(paymentData.order_id);
+-        /** sometimes this even fires before the order is updated in the remote system */
+-        const outstanding = (0, get_smallest_unit_1.getAmountFromSmallestUnit)(order.amount_paid == 0 ? paymentData.amount : order.amount_paid, paymentData.currency.toUpperCase());
+-        switch (event) {
+-            // payment authorization is handled in checkout flow. webhook not needed
+-            case "payment.captured":
+-                return {
+-                    action: utils_1.PaymentActions.SUCCESSFUL,
+-                    data: {
+-                        session_id: paymentData.notes
+-                            .session_id,
+-                        amount: outstanding
+-                    }
+-                };
+-            case "payment.authorized":
+-                return {
+-                    action: utils_1.PaymentActions.AUTHORIZED,
+-                    data: {
+-                        session_id: paymentData.notes
+-                            .session_id,
+-                        amount: outstanding
+-                    }
+-                };
+-            case "payment.failed":
+-                // TODO: notify customer of failed payment
+-                return {
+-                    action: utils_1.PaymentActions.FAILED,
+-                    data: {
+-                        session_id: paymentData.notes
+-                            .session_id,
+-                        amount: outstanding
+-                    }
+-                };
+-                break;
+-            default:
+-                return { action: utils_1.PaymentActions.NOT_SUPPORTED };
++        // Webhooks may arrive out of order. Use canonical provider state, not stale snapshots.
++        const payment = await this.razorpay_.payments.fetch(snapshot.id);
++        const order = await this.razorpay_.orders.fetch(snapshot.order_id);
++        if (payment.id !== snapshot.id || payment.order_id !== order.id || payment.currency !== order.currency ||
++            Number(payment.amount) !== Number(order.amount)) throw new Error("Razorpay webhook payment does not match order");
++        const session = await this.resolveVerifiedPaymentSession(order, payment.notes?.session_id);
++        if (Number(payment.amount_refunded || 0) > 0 || payment.status === "refunded") return { action: utils_1.PaymentActions.NOT_SUPPORTED };
++        let action;
++        if (payment.status === "captured" && payment.captured === true && order.status === "paid" && Number(order.amount_paid) === Number(order.amount)) {
++            action = utils_1.PaymentActions.SUCCESSFUL;
++        } else if (payment.status === "authorized") {
++            action = utils_1.PaymentActions.AUTHORIZED;
++        } else {
++            // Failed attempts must not fail a session that another attempt can still pay.
++            return { action: utils_1.PaymentActions.NOT_SUPPORTED };
+         }
++        this.logger.info("Razorpay webhook mapped", { event, razorpay_order_id: order.id, payment_session_id: session.id, action });
++        return { action, data: { session_id: session.id, amount: (0, get_smallest_unit_1.getAmountFromSmallestUnit)(payment.amount, payment.currency) } };
      }
      async createAccountHolder(input) {
 -        const { first_name, last_name, email, phone, billing_address } = input
